@@ -81,7 +81,7 @@ export default function Contact() {
               </div>
               <h3 className="font-display text-xl font-bold text-white mb-2">Visit Us</h3>
               <p className="text-gray-400">
-                No 17, Punchiwariyapola , Werapola , Wariyapola
+                Randu Salon, No 41 , New Shopping Mall , First Floor , Wariyapola
               </p>
             </div>
 
@@ -168,7 +168,7 @@ export default function Contact() {
                       value={formData.phone}
                       onChange={handleChange}
                       className="w-full bg-dark-400 border border-gold-600/30 rounded-lg py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:border-gold-500 transition-colors"
-                      placeholder="+94 729 852 612"
+                      placeholder="+94 XXX XXX"
                     />
                   </div>
                   <div>
