@@ -13,10 +13,30 @@ export default function Contact() {
     message: ''
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    alert('Thank you for your message! We will get back to you within 24 hours.');
-    setFormData({ name: '', email: '', phone: '', subject: '', message: '' });
+    
+    try {
+      const response = await fetch('http://localhost:8080/api/contact', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        alert('Thank you for your message! We will get back to you within 24 hours.');
+        setFormData({ name: '', email: '', phone: '', subject: '', message: '' });
+      } else {
+        alert('Failed to send message: ' + data.message);
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      alert('Failed to send message. Please try again later.');
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -61,8 +81,7 @@ export default function Contact() {
               </div>
               <h3 className="font-display text-xl font-bold text-white mb-2">Visit Us</h3>
               <p className="text-gray-400">
-                123 Luxury Lane<br />
-                Beverly Hills, CA 90210
+                No 17, Punchiwariyapola , Werapola , Wariyapola
               </p>
             </div>
 
@@ -72,8 +91,8 @@ export default function Contact() {
               </div>
               <h3 className="font-display text-xl font-bold text-white mb-2">Call Us</h3>
               <p className="text-gray-400">
-                Main: +1 (555) 123-4567<br />
-                Booking: +1 (555) 123-4568
+                Main: +94 729 852 612<br />
+                Booking: +94 729 852 612
               </p>
             </div>
 
@@ -82,10 +101,9 @@ export default function Contact() {
                 <Mail className="w-8 h-8 text-gold-500" />
               </div>
               <h3 className="font-display text-xl font-bold text-white mb-2">Email Us</h3>
-              <p className="text-gray-400">
-                info@randusalon.com<br />
-                bookings@randusalon.com
-              </p>
+              <div className="text-gray-400 break-all">
+                kavindupremasiri272@gmail.com
+              </div>
             </div>
 
             <div className="bg-dark-400 p-8 rounded-2xl border border-gold-600/20 text-center hover:border-gold-500/50 transition-all duration-300">
@@ -150,7 +168,7 @@ export default function Contact() {
                       value={formData.phone}
                       onChange={handleChange}
                       className="w-full bg-dark-400 border border-gold-600/30 rounded-lg py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:border-gold-500 transition-colors"
-                      placeholder="(555) 123-4567"
+                      placeholder="+94 729 852 612"
                     />
                   </div>
                   <div>
@@ -220,7 +238,7 @@ export default function Contact() {
                     <span>Need immediate assistance?</span>
                   </h4>
                   <p className="text-gray-400">
-                    Call us at <span className="text-gold-400">+1 (555) 123-4567</span> or use our 
+                    Call us at <span className="text-gold-400">+94 729 852 612</span> or use our 
                     <a href="/booking" className="text-gold-500 hover:text-gold-400 ml-1">
                       online booking system
                     </a>.

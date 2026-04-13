@@ -62,15 +62,15 @@ const Footer = () => {
             <ul className="space-y-4">
               <li className="flex items-start space-x-3">
                 <MapPin className="w-5 h-5 text-gold-500 flex-shrink-0 mt-1" />
-                <span className="text-gray-400">123 Luxury Lane, Beverly Hills, CA 90210</span>
+                <span className="text-gray-400">No 17, Punchiwariyapola , Werapola , Wariyapola</span>
               </li>
               <li className="flex items-center space-x-3">
                 <Phone className="w-5 h-5 text-gold-500 flex-shrink-0" />
-                <span className="text-gray-400">+1 (555) 123-4567</span>
+                <span className="text-gray-400">+94 729 852 612</span>
               </li>
               <li className="flex items-center space-x-3">
                 <Mail className="w-5 h-5 text-gold-500 flex-shrink-0" />
-                <span className="text-gray-400">info@randusalon.com</span>
+                <span className="text-gray-400">kavindupremasiri272@gmail.com</span>
               </li>
               <li className="flex items-start space-x-3">
                 <Clock className="w-5 h-5 text-gold-500 flex-shrink-0 mt-1" />
