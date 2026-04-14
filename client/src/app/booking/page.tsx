@@ -2,7 +2,8 @@
 import { useState } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
-import { Calendar, Clock, User, Mail, Phone, CreditCard, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { Calendar, Clock, User, Mail, Phone, CreditCard, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, ShieldCheck } from 'lucide-react';
+import { jsPDF } from 'jspdf';
 
 // Service data matching the services page
 const serviceCategories = [
@@ -72,18 +73,17 @@ const serviceCategories = [
 const APPOINTMENT_FEE_PER_SERVICE = 50;
 const MAX_APPOINTMENT_FEE = 200;
 
-// Business hours configuration
-// Monday to Friday: 9:00 AM - 8:00 PM
-// Saturday: 9:00 AM - 6:00 PM
-// Sunday: 10:00 AM - 4:00 PM
-const BUSINESS_HOURS: { [key: string]: { start: string; end: string } } = {
-  'Monday': { start: '9:00 AM', end: '8:00 PM' },
-  'Tuesday': { start: '9:00 AM', end: '8:00 PM' },
-  'Wednesday': { start: '9:00 AM', end: '8:00 PM' },
-  'Thursday': { start: '9:00 AM', end: '8:00 PM' },
-  'Friday': { start: '9:00 AM', end: '8:00 PM' },
-  'Saturday': { start: '9:00 AM', end: '6:00 PM' },
-  'Sunday': { start: '10:00 AM', end: '4:00 PM' }
+// Business hours based on day index (0 = Sunday, 1 = Monday, etc.)
+const getBusinessHours = (date: Date) => {
+  const dayIndex = date.getDay(); 
+  switch(dayIndex) {
+    case 0: // Sunday
+      return { start: '10:00 AM', end: '4:00 PM' };
+    case 6: // Saturday
+      return { start: '9:00 AM', end: '6:00 PM' };
+    default: // Monday to Friday (1-5)
+      return { start: '9:00 AM', end: '8:00 PM' };
+  }
 };
 
 // Convert time string to minutes for comparison
@@ -100,11 +100,36 @@ const timeToMinutes = (timeStr: string): number => {
   return hours * 60 + minutes;
 };
 
+// Generate time slots in 30-minute increments
+const generateTimeSlots = (startTime: string, endTime: string): string[] => {
+  const slots: string[] = [];
+  const startMinutes = timeToMinutes(startTime);
+  const endMinutes = timeToMinutes(endTime);
+  
+  for (let minutes = startMinutes; minutes < endMinutes; minutes += 30) {
+    const hours24 = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    const period = hours24 >= 12 ? 'PM' : 'AM';
+    let hours12 = hours24 % 12;
+    if (hours12 === 0) hours12 = 12;
+    const timeStr = `${hours12}:${mins.toString().padStart(2, '0')} ${period}`;
+    slots.push(timeStr);
+  }
+  
+  return slots;
+};
+
 export default function Booking() {
   const [step, setStep] = useState(1);
   const [showCalendar, setShowCalendar] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [openCategories, setOpenCategories] = useState<string[]>(['haircuts']);
+  
+  // OTP Verification States
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [generatedOtp, setGeneratedOtp] = useState('');
+
   const [formData, setFormData] = useState({
     services: [] as Array<{ name: string; price: number; category: string; duration: number }>,
     stylist: '',
@@ -123,50 +148,41 @@ export default function Booking() {
     'Any Available Stylist'
   ];
 
-  // Calculate total duration in minutes
   const calculateTotalDuration = () => {
     return formData.services.reduce((sum, service) => sum + service.duration, 0);
   };
 
-  // Generate available time slots based on selected date
   const getAvailableTimeSlots = () => {
     if (!formData.date) return [];
     
-    const selectedDate = new Date(formData.date);
-    const dayName = selectedDate.toLocaleDateString('en-US', { weekday: 'long' });
-    const hours = BUSINESS_HOURS[dayName];
+    const [year, month, day] = formData.date.split('-');
+    const selectedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
     
-    if (!hours) return [];
+    const hours = getBusinessHours(selectedDate);
     
     const startMinutes = timeToMinutes(hours.start);
     const endMinutes = timeToMinutes(hours.end);
     const totalDuration = calculateTotalDuration();
     
-    // Generate all possible time slots (in 1-hour increments)
-    const allSlots = [
-      '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
-      '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM',
-      '5:00 PM', '6:00 PM', '7:00 PM'
-    ];
+    const allSlots = generateTimeSlots(hours.start, hours.end);
     
-    // Filter slots based on business hours and ensure appointment finishes before closing
     return allSlots.filter(slot => {
       const slotMinutes = timeToMinutes(slot);
       const finishMinutes = slotMinutes + totalDuration;
+      const maxStartMinutes = endMinutes - 60;
       
-      // Check if slot is within business hours and appointment finishes before closing
-      return slotMinutes >= startMinutes && finishMinutes <= endMinutes;
+      return slotMinutes >= startMinutes && 
+             slotMinutes <= maxStartMinutes && 
+             finishMinutes <= endMinutes;
     });
   };
 
-  // Calculate finishing time based on start time and total duration
   const calculateFinishingTime = () => {
     if (!formData.time || formData.services.length === 0) return null;
     
     const totalDuration = calculateTotalDuration();
     const startTime = formData.time;
     
-    // Parse start time
     const timeMatch = startTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
     if (!timeMatch) return null;
     
@@ -174,16 +190,13 @@ export default function Booking() {
     const minutes = parseInt(timeMatch[2]);
     const period = timeMatch[3].toUpperCase();
     
-    // Convert to 24-hour format
     if (period === 'PM' && hours !== 12) hours += 12;
     if (period === 'AM' && hours === 12) hours = 0;
     
-    // Calculate end time
     const endMinutesTotal = hours * 60 + minutes + totalDuration;
     const endHours24 = Math.floor(endMinutesTotal / 60) % 24;
     const endMins = endMinutesTotal % 60;
     
-    // Convert back to 12-hour format
     const endPeriod = endHours24 >= 12 ? 'PM' : 'AM';
     let endHours12 = endHours24 % 12;
     if (endHours12 === 0) endHours12 = 12;
@@ -191,7 +204,6 @@ export default function Booking() {
     return `${endHours12}:${endMins.toString().padStart(2, '0')} ${endPeriod}`;
   };
 
-  // Calculate appointment fee based on number of services
   const calculateAppointmentFee = () => {
     const serviceCount = formData.services.length;
     if (serviceCount === 0) return 0;
@@ -199,26 +211,139 @@ export default function Booking() {
     return Math.min(calculatedFee, MAX_APPOINTMENT_FEE);
   };
 
-  // Calculate total price
   const calculateTotalPrice = () => {
     const servicesTotal = formData.services.reduce((sum, service) => sum + service.price, 0);
     const appointmentFee = calculateAppointmentFee();
     return servicesTotal + appointmentFee;
   };
 
+  // --- PDF GENERATION LOGIC ---
+  const generatePDF = (bookingData: any) => {
+    const doc = new jsPDF();
+    
+    // Background & Theme Colors
+    const gold = [212, 175, 55];
+    const dark = [18, 18, 18];
+
+    // Header Background
+    doc.setFillColor(dark[0], dark[1], dark[2]);
+    doc.rect(0, 0, 210, 50, 'F');
+    
+    // Title
+    doc.setTextColor(gold[0], gold[1], gold[2]);
+    doc.setFontSize(26);
+    doc.text('RANDU SALON', 105, 25, { align: 'center' });
+    doc.setFontSize(12);
+    doc.text('OFFICIAL BOOKING RECEIPT', 105, 35, { align: 'center' });
+
+    // Body
+    doc.setTextColor(40, 40, 40);
+    
+    let yPos = 70;
+    const addField = (label: string, value: string) => {
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`${label}:`, 20, yPos);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`${value}`, 60, yPos);
+      yPos += 8;
+    };
+
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(dark[0], dark[1], dark[2]);
+    doc.text('Client Information', 20, yPos - 10);
+    
+    addField('Name', bookingData.name);
+    addField('Email', bookingData.email);
+    addField('Phone', bookingData.phone);
+    
+    yPos += 10;
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Appointment Details', 20, yPos - 10);
+
+    addField('Date', bookingData.date);
+    addField('Time Slot', `${bookingData.time} - ${bookingData.finishingTime}`);
+    addField('Stylist', bookingData.stylist || 'Any Available Stylist');
+    
+    yPos += 5;
+    doc.setDrawColor(gold[0], gold[1], gold[2]);
+    doc.line(20, yPos, 190, yPos);
+    yPos += 10;
+
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Services Booked:', 20, yPos);
+    yPos += 10;
+    
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(12);
+    bookingData.services.forEach((s: any) => {
+      doc.text(`- ${s.name} (${s.duration} min)`, 25, yPos);
+      doc.text(`Rs.${s.price}`, 170, yPos);
+      yPos += 8;
+    });
+
+    yPos += 5;
+    doc.text(`Appointment Fee:`, 25, yPos);
+    doc.text(`Rs.${calculateAppointmentFee()}`, 170, yPos);
+    
+    yPos += 15;
+    doc.setFillColor(gold[0], gold[1], gold[2]);
+    doc.rect(20, yPos, 170, 15, 'F');
+    doc.setTextColor(dark[0], dark[1], dark[2]);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`TOTAL AMOUNT: Rs.${bookingData.totalPrice}`, 105, yPos + 10, { align: 'center' });
+
+    doc.save(`Booking_${bookingData.name.replace(/\s+/g, '_')}.pdf`);
+  };
+
+  // --- OTP VERIFICATION LOGIC ---
+  const handleSendOTP = () => {
+    // Generate a random 6-digit OTP
+    const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    setGeneratedOtp(newOtp);
+    setIsVerifying(true);
+    
+    // In a real application, you would call an API here to send the email
+    // await fetch('/api/send-otp', { method: 'POST', body: JSON.stringify({ email: formData.email, otp: newOtp }) })
+    
+    // Simulating email sent via alert for demonstration
+    alert(`SIMULATION: An email has been sent to ${formData.email}.\nYour OTP is: ${newOtp}`);
+  };
+
+  const handleVerifyAndConfirm = () => {
+    if (otp === generatedOtp) {
+      const summary = {
+        ...formData,
+        finishingTime: calculateFinishingTime(),
+        totalPrice: calculateTotalPrice(),
+      };
+      
+      generatePDF(summary);
+      alert('Booking Confirmed successfully! Your receipt has been downloaded.');
+      setIsVerifying(false);
+      
+      // Optional: Reset form state here or redirect user
+      // setStep(1);
+      // setFormData({...});
+    } else {
+      alert('Invalid OTP. Please try again.');
+    }
+  };
+
   const availableTimeSlots = getAvailableTimeSlots();
 
-  // Get business hours display for selected date
   const getBusinessHoursDisplay = () => {
     if (!formData.date) return null;
-    const selectedDate = new Date(formData.date);
-    const dayName = selectedDate.toLocaleDateString('en-US', { weekday: 'long' });
-    const hours = BUSINESS_HOURS[dayName];
-    if (!hours) return null;
+    const [year, month, day] = formData.date.split('-');
+    const selectedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    const hours = getBusinessHours(selectedDate);
     return `${hours.start} - ${hours.end}`;
   };
 
-  // Date helper functions
   const getMinDate = () => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -237,21 +362,19 @@ export default function Booking() {
     const maxDate = getMaxDate();
     maxDate.setHours(0, 0, 0, 0);
     
-    // Check if date is within range
     if (date <= today || date > maxDate) return false;
-    
-    // Check if date is a valid business day
-    const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
-    return BUSINESS_HOURS.hasOwnProperty(dayName);
+    return true;
   };
 
   const formatDate = (date: Date) => {
-    return date.toISOString().split('T')[0];
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   const handleDateSelect = (date: Date) => {
     if (isDateSelectable(date)) {
-      // Reset time when date changes
       setFormData({
         ...formData,
         date: formatDate(date),
@@ -325,7 +448,7 @@ export default function Booking() {
     }
 
     return (
-      <div className="bg-dark-300 rounded-xl border border-gold-600/30 p-6 absolute top-full mt-2 left-0 z-20 w-80">
+      <div className="bg-dark-300 rounded-xl border border-gold-600/30 p-6 absolute top-full mt-2 left-0 z-20 w-80 shadow-xl">
         <div className="flex items-center justify-between mb-4">
           <button
             type="button"
@@ -382,7 +505,7 @@ export default function Booking() {
       services: prev.services.some(s => s.name === service.name)
         ? prev.services.filter(s => s.name !== service.name)
         : [...prev.services, service],
-      time: '' // Reset time when services change as duration affects available slots
+      time: '' 
     }));
   };
 
@@ -390,7 +513,7 @@ export default function Booking() {
     setFormData(prev => ({
       ...prev,
       services: prev.services.filter(s => s.name !== serviceName),
-      time: '' // Reset time when services change as duration affects available slots
+      time: '' 
     }));
   };
 
@@ -409,23 +532,8 @@ export default function Booking() {
       }
       setStep(3);
     } else {
-      const finishingTime = calculateFinishingTime();
-      const bookingSummary = {
-        services: formData.services,
-        stylist: formData.stylist,
-        date: formData.date,
-        time: formData.time,
-        finishingTime: finishingTime,
-        totalDuration: calculateTotalDuration(),
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        notes: formData.notes,
-        totalPrice: calculateTotalPrice()
-      };
-      console.log('Booking submitted:', bookingSummary);
-      alert(`Thank you for booking! We will send a confirmation email to ${formData.email} shortly.\n\nServices booked: ${formData.services.map(s => s.name).join(', ')}\nStart Time: ${formData.time}\nFinishing Time: ${finishingTime}\nTotal Duration: ${calculateTotalDuration()} minutes\nTotal: Rs.${calculateTotalPrice()}`);
-      // Reset form or redirect here
+      // Step 3 Confirmation - Triggers OTP instead of immediate booking
+      handleSendOTP();
     }
   };
 
@@ -443,8 +551,49 @@ export default function Booking() {
   const businessHours = getBusinessHoursDisplay();
 
   return (
-    <main className="min-h-screen">
+    <main className="min-h-screen relative">
       <Navbar />
+
+      {/* OTP Verification Modal Overlay */}
+      {isVerifying && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 bg-dark-900/90 backdrop-blur-sm">
+          <div className="bg-dark-400 border border-gold-600/50 p-8 rounded-3xl max-w-md w-full shadow-2xl animate-fade-in">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-gold-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <ShieldCheck className="w-8 h-8 text-gold-500" />
+              </div>
+              <h3 className="text-2xl font-bold gold-text-gradient">Verify Booking</h3>
+              <p className="text-gray-400 mt-2 text-sm">
+                We sent a 6-digit verification code to <span className="text-white font-medium">{formData.email}</span>
+              </p>
+            </div>
+            
+            <input
+              type="text"
+              maxLength={6}
+              value={otp}
+              onChange={(e) => setOtp(e.target.value)}
+              className="w-full bg-dark-300 border border-gold-600/30 rounded-xl py-4 text-center text-3xl tracking-[0.5em] text-gold-400 focus:outline-none focus:border-gold-500 mb-6 font-mono"
+              placeholder="000000"
+            />
+            
+            <div className="flex gap-4">
+              <button 
+                onClick={() => setIsVerifying(false)}
+                className="flex-1 py-3 border border-gray-600 text-gray-400 rounded-full font-semibold hover:bg-gray-800 transition-all"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleVerifyAndConfirm}
+                className="flex-1 gold-gradient text-dark-900 py-3 rounded-full font-semibold hover:shadow-lg hover:shadow-gold-500/30 transition-all"
+              >
+                Verify & Book
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Hero Section */}
       <section className="relative py-32 bg-dark-400">
@@ -461,7 +610,7 @@ export default function Booking() {
               <span className="gold-text-gradient">Book Your Appointment</span>
             </h1>
             <p className="text-gray-300 text-lg max-w-3xl mx-auto">
-              Schedule your luxury beauty experience with our expert stylists.
+              Schedule your Randu beauty experience with our expert stylists.
             </p>
           </div>
         </div>
@@ -639,30 +788,47 @@ export default function Booking() {
                         )}
                       </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Select Time *
-                        </label>
-                        <div className="relative mb-4">
-                          <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gold-500" />
-                          <select
-                            name="time"
-                            value={formData.time}
-                            onChange={handleChange}
-                            required
-                            disabled={availableTimeSlots.length === 0}
-                            className="w-full bg-dark-300 border border-gold-600/30 rounded-lg py-3 pl-11 pr-4 text-white focus:outline-none focus:border-gold-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <option value="">Select a time slot</option>
-                            {availableTimeSlots.map((slot) => (
-                              <option key={slot} value={slot}>{slot}</option>
-                            ))}
-                          </select>
+                      <div className="mt-6">
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="block text-sm font-medium text-gray-300">
+                            Select Time *
+                          </label>
+                          {formData.date && availableTimeSlots.length > 0 && (
+                            <span className="text-xs text-green-400 bg-green-400/10 px-2 py-1 rounded-full">
+                              {availableTimeSlots.length} slots available
+                            </span>
+                          )}
                         </div>
-                        {formData.date && availableTimeSlots.length === 0 && formData.services.length > 0 && (
-                          <p className="text-red-400 text-sm mt-2">
-                            No available time slots for the selected date and service duration. Please choose another date.
-                          </p>
+
+                        {!formData.date ? (
+                          <div className="p-6 border border-dashed border-gold-600/30 rounded-xl text-center">
+                            <Clock className="w-8 h-8 text-gold-500/50 mx-auto mb-2" />
+                            <p className="text-gray-400 text-sm">Please select a date to see available times.</p>
+                          </div>
+                        ) : availableTimeSlots.length === 0 ? (
+                          <div className="p-6 border border-dashed border-red-500/30 bg-red-500/5 rounded-xl text-center">
+                            <p className="text-red-400 text-sm">
+                              No available time slots for the selected date. <br/>
+                              Please choose another date or reduce service duration.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-[280px] overflow-y-auto pr-2 custom-scrollbar">
+                            {availableTimeSlots.map((slot) => (
+                              <button
+                                type="button"
+                                key={slot}
+                                onClick={() => setFormData({ ...formData, time: slot })}
+                                className={`p-3 rounded-xl text-sm font-medium border transition-all duration-200 flex items-center justify-center ${
+                                  formData.time === slot
+                                    ? 'bg-gold-500 border-gold-500 text-dark-900 shadow-[0_0_15px_rgba(212,175,55,0.25)]'
+                                    : 'bg-dark-300 border-gold-600/30 text-gray-300 hover:border-gold-500/70 hover:text-white hover:bg-dark-200'
+                                }`}
+                              >
+                                {slot}
+                              </button>
+                            ))}
+                          </div>
                         )}
                       </div>
 
@@ -783,7 +949,7 @@ export default function Booking() {
                         step === 1 ? 'ml-auto' : ''
                       }`}
                     >
-                      {step === 3 ? 'Confirm Booking' : 'Continue'}
+                      {step === 3 ? 'Send Verification Code' : 'Continue'}
                     </button>
                   </div>
                 </form>
@@ -906,6 +1072,32 @@ export default function Booking() {
                     <div>
                       <p className="text-gray-400">Time</p>
                       <p className="text-white font-semibold">{formData.time}</p>
+                    </div>
+                  )}
+
+                  {/* Dynamically added User Information */}
+                  {formData.name && (
+                    <div className="pt-3 border-t border-gold-600/20">
+                      <p className="text-gray-400">Name</p>
+                      <p className="text-white font-semibold">{formData.name}</p>
+                    </div>
+                  )}
+                  {formData.email && (
+                    <div>
+                      <p className="text-gray-400">Email</p>
+                      <p className="text-white font-semibold">{formData.email}</p>
+                    </div>
+                  )}
+                  {formData.phone && (
+                    <div>
+                      <p className="text-gray-400">Phone</p>
+                      <p className="text-white font-semibold">{formData.phone}</p>
+                    </div>
+                  )}
+                  {formData.notes && (
+                    <div>
+                      <p className="text-gray-400">Notes</p>
+                      <p className="text-white font-semibold break-words">{formData.notes}</p>
                     </div>
                   )}
                 </div>
