@@ -115,13 +115,15 @@ export default function Home() {
                     <p className="text-white font-semibold">Mon - Sat: 9AM - 8PM</p>
                   </div>
                 </div>
-                <div className="flex items-center space-x-3">
-                  <MapPin className="w-6 h-6 text-gold-500" />
-                  <div>
-                    <p className="text-sm text-gray-400">Location</p>
-                    <p className="text-white font-semibold">123 Luxury Lane, BH</p>
-                  </div>
+              <div className="flex items-start space-x-3">
+                <MapPin className="w-5 h-5 sm:w-6 sm:h-6 text-gold-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs sm:text-sm text-gray-400">Location</p>
+                  <p className="text-white font-semibold text-sm sm:text-base">
+                    Randu Salon, No 41 , New Shopping Mall , First Floor , Wariyapola
+                  </p>
                 </div>
+              </div>
               </div>
             </div>
 

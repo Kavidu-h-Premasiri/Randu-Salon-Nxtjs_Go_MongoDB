@@ -125,10 +125,15 @@ export default function Booking() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [openCategories, setOpenCategories] = useState<string[]>(['haircuts']);
   
+  // Error states for validation
+  const [errors, setErrors] = useState<{[key: string]: string}>({});
+  const [touched, setTouched] = useState<{[key: string]: boolean}>({});
+  
   // OTP Verification States
   const [isVerifying, setIsVerifying] = useState(false);
   const [otp, setOtp] = useState('');
   const [generatedOtp, setGeneratedOtp] = useState('');
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
 
   const [formData, setFormData] = useState({
     services: [] as Array<{ name: string; price: number; category: string; duration: number }>,
@@ -147,6 +152,102 @@ export default function Booking() {
     'Sofia Rodriguez',
     'Any Available Stylist'
   ];
+
+  // Validation functions
+  const validateName = (name: string) => {
+    if (!name.trim()) return 'Full name is required';
+    if (name.trim().length < 2) return 'Name must be at least 2 characters';
+    if (name.trim().length > 50) return 'Name must be less than 50 characters';
+    if (!/^[a-zA-Z\s\-']+$/.test(name.trim())) return 'Name can only contain letters, spaces, hyphens, and apostrophes';
+    return '';
+  };
+
+  const validateEmail = (email: string) => {
+    if (!email.trim()) return 'Email address is required';
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) return 'Please enter a valid email address (e.g., name@example.com)';
+    if (email.length > 100) return 'Email must be less than 100 characters';
+    return '';
+  };
+
+  const validatePhone = (phone: string) => {
+    if (!phone.trim()) return 'Phone number is required';
+    const phoneRegex = /^[\+]?[(]?[0-9]{1,4}[)]?[-\s\.]?[(]?[0-9]{1,4}[)]?[-\s\.]?[0-9]{1,5}[-\s\.]?[0-9]{1,5}$/;
+    if (!phoneRegex.test(phone.trim())) return 'Please enter a valid phone number';
+    const digitsOnly = phone.replace(/\D/g, '');
+    if (digitsOnly.length < 9 || digitsOnly.length > 15) return 'Phone number must be between 9-15 digits';
+    return '';
+  };
+
+  const validateDate = (date: string) => {
+    if (!date) return 'Please select a date';
+    const selectedDate = new Date(date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (selectedDate <= today) return 'Please select a future date';
+    const maxDate = new Date();
+    maxDate.setDate(maxDate.getDate() + 14);
+    if (selectedDate > maxDate) return 'Please select a date within the next 14 days';
+    return '';
+  };
+
+  const validateTime = (time: string, date: string, services: any[]) => {
+    if (!time) return 'Please select a time slot';
+    if (services.length === 0) return 'Please select at least one service';
+    
+    // Check if time slot is valid for the selected date
+    const [year, month, day] = date.split('-');
+    const selectedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    const hours = getBusinessHours(selectedDate);
+    const startMinutes = timeToMinutes(hours.start);
+    const endMinutes = timeToMinutes(hours.end);
+    const slotMinutes = timeToMinutes(time);
+    const totalDuration = services.reduce((sum, s) => sum + s.duration, 0);
+    const finishMinutes = slotMinutes + totalDuration;
+    
+    if (slotMinutes < startMinutes) return 'Selected time is before business hours';
+    if (finishMinutes > endMinutes) return 'Appointment would end after business hours';
+    if (slotMinutes > endMinutes - 60) return 'Please select an earlier time slot to complete your services';
+    
+    return '';
+  };
+
+  const validateServices = (services: any[]) => {
+    if (services.length === 0) return 'Please select at least one service';
+    if (services.length > 10) return 'Maximum 10 services can be selected per appointment';
+    return '';
+  };
+
+  const validateStep = (stepNumber: number) => {
+    const newErrors: {[key: string]: string} = {};
+    
+    if (stepNumber === 1) {
+      const serviceError = validateServices(formData.services);
+      if (serviceError) newErrors.services = serviceError;
+    }
+    else if (stepNumber === 2) {
+      const dateError = validateDate(formData.date);
+      if (dateError) newErrors.date = dateError;
+      
+      if (formData.date) {
+        const timeError = validateTime(formData.time, formData.date, formData.services);
+        if (timeError) newErrors.time = timeError;
+      }
+    }
+    else if (stepNumber === 3) {
+      const nameError = validateName(formData.name);
+      if (nameError) newErrors.name = nameError;
+      
+      const emailError = validateEmail(formData.email);
+      if (emailError) newErrors.email = emailError;
+      
+      const phoneError = validatePhone(formData.phone);
+      if (phoneError) newErrors.phone = phoneError;
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const calculateTotalDuration = () => {
     return formData.services.reduce((sum, service) => sum + service.duration, 0);
@@ -301,20 +402,60 @@ export default function Booking() {
   };
 
   // --- OTP VERIFICATION LOGIC ---
-  const handleSendOTP = () => {
-    // Generate a random 6-digit OTP
-    const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    setGeneratedOtp(newOtp);
-    setIsVerifying(true);
+  const handleSendOTP = async () => {
+    // Final validation before sending OTP
+    const isValid = validateStep(3);
+    if (!isValid) {
+      // Mark all fields as touched to show errors
+      setTouched({
+        name: true,
+        email: true,
+        phone: true
+      });
+      return;
+    }
     
-    // In a real application, you would call an API here to send the email
-    // await fetch('/api/send-otp', { method: 'POST', body: JSON.stringify({ email: formData.email, otp: newOtp }) })
+    setIsSendingOtp(true);
     
-    // Simulating email sent via alert for demonstration
-    alert(`SIMULATION: An email has been sent to ${formData.email}.\nYour OTP is: ${newOtp}`);
+    try {
+      const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      
+      const response = await fetch('/api/send-otp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: formData.email,
+          otp: newOtp,
+          name: formData.name || 'Valued Customer'
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setGeneratedOtp(newOtp);
+        setIsVerifying(true);
+        alert(`Verification code sent to ${formData.email}. Please check your inbox.`);
+      } else {
+        throw new Error(data.message || 'Failed to send OTP email');
+      }
+      
+    } catch (error) {
+      console.error('Error sending OTP:', error);
+      alert('Unable to send verification code. Please ensure your backend is correctly configured.');
+    } finally {
+      setIsSendingOtp(false);
+    }
   };
 
   const handleVerifyAndConfirm = () => {
+    if (!otp || otp.length !== 6) {
+      alert('Please enter the 6-digit verification code');
+      return;
+    }
+    
     if (otp === generatedOtp) {
       const summary = {
         ...formData,
@@ -326,11 +467,24 @@ export default function Booking() {
       alert('Booking Confirmed successfully! Your receipt has been downloaded.');
       setIsVerifying(false);
       
-      // Optional: Reset form state here or redirect user
-      // setStep(1);
-      // setFormData({...});
+      // Reset form
+      setStep(1);
+      setFormData({
+        services: [],
+        stylist: '',
+        date: '',
+        time: '',
+        name: '',
+        email: '',
+        phone: '',
+        notes: ''
+      });
+      setOtp('');
+      setErrors({});
+      setTouched({});
     } else {
       alert('Invalid OTP. Please try again.');
+      setOtp('');
     }
   };
 
@@ -380,6 +534,7 @@ export default function Booking() {
         date: formatDate(date),
         time: ''
       });
+      setErrors(prev => ({ ...prev, date: '', time: '' }));
       setShowCalendar(false);
     }
   };
@@ -507,6 +662,7 @@ export default function Booking() {
         : [...prev.services, service],
       time: '' 
     }));
+    setErrors(prev => ({ ...prev, services: '' }));
   };
 
   const removeService = (serviceName: string) => {
@@ -517,31 +673,58 @@ export default function Booking() {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (step === 1) {
-      if (formData.services.length === 0) {
-        alert('Please select at least one service');
-        return;
-      }
-      setStep(2);
-    } else if (step === 2) {
-      if (!formData.date || !formData.time) {
-        alert('Please select both date and time');
-        return;
-      }
-      setStep(3);
-    } else {
-      // Step 3 Confirmation - Triggers OTP instead of immediate booking
-      handleSendOTP();
+  const handleFieldChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value
+    });
+    
+    // Clear error for this field when user starts typing
+    if (errors[name]) {
+      setErrors(prev => ({ ...prev, [name]: '' }));
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+  const handleBlur = (fieldName: string) => {
+    setTouched(prev => ({ ...prev, [fieldName]: true }));
+    
+    // Validate on blur
+    let error = '';
+    switch(fieldName) {
+      case 'name':
+        error = validateName(formData.name);
+        break;
+      case 'email':
+        error = validateEmail(formData.email);
+        break;
+      case 'phone':
+        error = validatePhone(formData.phone);
+        break;
+    }
+    if (error) {
+      setErrors(prev => ({ ...prev, [fieldName]: error }));
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (step === 1) {
+      if (validateStep(1)) {
+        setStep(2);
+      } else {
+        alert(errors.services || 'Please fix the errors before proceeding');
+      }
+    } else if (step === 2) {
+      if (validateStep(2)) {
+        setStep(3);
+      } else {
+        alert(errors.date || errors.time || 'Please fix the errors before proceeding');
+      }
+    } else {
+      handleSendOTP();
+    }
   };
 
   const serviceCount = formData.services.length;
@@ -564,7 +747,7 @@ export default function Booking() {
               </div>
               <h3 className="text-2xl font-bold gold-text-gradient">Verify Booking</h3>
               <p className="text-gray-400 mt-2 text-sm">
-                We sent a 6-digit verification code to <span className="text-white font-medium">{formData.email}</span>
+                Enter the 6-digit verification code sent to your email to confirm your booking
               </p>
             </div>
             
@@ -572,14 +755,18 @@ export default function Booking() {
               type="text"
               maxLength={6}
               value={otp}
-              onChange={(e) => setOtp(e.target.value)}
+              onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
               className="w-full bg-dark-300 border border-gold-600/30 rounded-xl py-4 text-center text-3xl tracking-[0.5em] text-gold-400 focus:outline-none focus:border-gold-500 mb-6 font-mono"
               placeholder="000000"
+              autoFocus
             />
             
             <div className="flex gap-4">
               <button 
-                onClick={() => setIsVerifying(false)}
+                onClick={() => {
+                  setIsVerifying(false);
+                  setOtp('');
+                }}
                 className="flex-1 py-3 border border-gray-600 text-gray-400 rounded-full font-semibold hover:bg-gray-800 transition-all"
               >
                 Cancel
@@ -717,6 +904,10 @@ export default function Booking() {
                           ))}
                         </div>
                         
+                        {errors.services && touched.services && (
+                          <p className="mt-2 text-sm text-red-400">{errors.services}</p>
+                        )}
+                        
                         {formData.services.length > 0 && (
                           <div className="mt-4 p-3 bg-gold-500/10 rounded-lg border border-gold-500/30">
                             <p className="text-gold-400 text-sm">
@@ -728,14 +919,14 @@ export default function Booking() {
 
                       <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Preferred Stylist
+                          Preferred Stylist (Optional)
                         </label>
                         <div className="relative">
                           <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gold-500" />
                           <select
                             name="stylist"
                             value={formData.stylist}
-                            onChange={handleChange}
+                            onChange={handleFieldChange}
                             className="w-full bg-dark-300 border border-gold-600/30 rounded-lg py-3 pl-11 pr-4 text-white focus:outline-none focus:border-gold-500 transition-colors"
                           >
                             <option value="">Choose a stylist</option>
@@ -762,7 +953,9 @@ export default function Booking() {
                           <button
                             type="button"
                             onClick={() => setShowCalendar(!showCalendar)}
-                            className="w-full bg-dark-300 border border-gold-600/30 rounded-lg py-3 pl-11 pr-4 text-left text-white focus:outline-none focus:border-gold-500 transition-colors hover:bg-dark-200"
+                            className={`w-full bg-dark-300 border rounded-lg py-3 pl-11 pr-4 text-left text-white focus:outline-none focus:border-gold-500 transition-colors hover:bg-dark-200 ${
+                              errors.date ? 'border-red-500' : 'border-gold-600/30'
+                            }`}
                           >
                             {formData.date || 'Click calendar icon to select date'}
                           </button>
@@ -781,6 +974,7 @@ export default function Booking() {
                           )}
                           {showCalendar && renderCalendar()}
                         </div>
+                        {errors.date && <p className="mt-2 text-sm text-red-400">{errors.date}</p>}
                         {formData.date && businessHours && (
                           <p className="mt-2 text-xs text-gold-400">
                             Business hours: {businessHours}
@@ -813,22 +1007,28 @@ export default function Booking() {
                             </p>
                           </div>
                         ) : (
-                          <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-[280px] overflow-y-auto pr-2 custom-scrollbar">
-                            {availableTimeSlots.map((slot) => (
-                              <button
-                                type="button"
-                                key={slot}
-                                onClick={() => setFormData({ ...formData, time: slot })}
-                                className={`p-3 rounded-xl text-sm font-medium border transition-all duration-200 flex items-center justify-center ${
-                                  formData.time === slot
-                                    ? 'bg-gold-500 border-gold-500 text-dark-900 shadow-[0_0_15px_rgba(212,175,55,0.25)]'
-                                    : 'bg-dark-300 border-gold-600/30 text-gray-300 hover:border-gold-500/70 hover:text-white hover:bg-dark-200'
-                                }`}
-                              >
-                                {slot}
-                              </button>
-                            ))}
-                          </div>
+                          <>
+                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-[280px] overflow-y-auto pr-2 custom-scrollbar">
+                              {availableTimeSlots.map((slot) => (
+                                <button
+                                  type="button"
+                                  key={slot}
+                                  onClick={() => {
+                                    setFormData({ ...formData, time: slot });
+                                    setErrors(prev => ({ ...prev, time: '' }));
+                                  }}
+                                  className={`p-3 rounded-xl text-sm font-medium border transition-all duration-200 flex items-center justify-center ${
+                                    formData.time === slot
+                                      ? 'bg-gold-500 border-gold-500 text-dark-900 shadow-[0_0_15px_rgba(212,175,55,0.25)]'
+                                      : 'bg-dark-300 border-gold-600/30 text-gray-300 hover:border-gold-500/70 hover:text-white hover:bg-dark-200'
+                                  }`}
+                                >
+                                  {slot}
+                                </button>
+                              ))}
+                            </div>
+                            {errors.time && <p className="mt-2 text-sm text-red-400">{errors.time}</p>}
+                          </>
                         )}
                       </div>
 
@@ -873,12 +1073,18 @@ export default function Booking() {
                             type="text"
                             name="name"
                             value={formData.name}
-                            onChange={handleChange}
+                            onChange={handleFieldChange}
+                            onBlur={() => handleBlur('name')}
                             required
-                            className="w-full bg-dark-300 border border-gold-600/30 rounded-lg py-3 pl-11 pr-4 text-white placeholder-gray-500 focus:outline-none focus:border-gold-500 transition-colors"
+                            className={`w-full bg-dark-300 border rounded-lg py-3 pl-11 pr-4 text-white placeholder-gray-500 focus:outline-none focus:border-gold-500 transition-colors ${
+                              errors.name && touched.name ? 'border-red-500' : 'border-gold-600/30'
+                            }`}
                             placeholder="Enter your full name"
                           />
                         </div>
+                        {errors.name && touched.name && (
+                          <p className="mt-2 text-sm text-red-400">{errors.name}</p>
+                        )}
                       </div>
 
                       <div>
@@ -891,12 +1097,18 @@ export default function Booking() {
                             type="email"
                             name="email"
                             value={formData.email}
-                            onChange={handleChange}
+                            onChange={handleFieldChange}
+                            onBlur={() => handleBlur('email')}
                             required
-                            className="w-full bg-dark-300 border border-gold-600/30 rounded-lg py-3 pl-11 pr-4 text-white placeholder-gray-500 focus:outline-none focus:border-gold-500 transition-colors"
+                            className={`w-full bg-dark-300 border rounded-lg py-3 pl-11 pr-4 text-white placeholder-gray-500 focus:outline-none focus:border-gold-500 transition-colors ${
+                              errors.email && touched.email ? 'border-red-500' : 'border-gold-600/30'
+                            }`}
                             placeholder="your@email.com"
                           />
                         </div>
+                        {errors.email && touched.email && (
+                          <p className="mt-2 text-sm text-red-400">{errors.email}</p>
+                        )}
                       </div>
 
                       <div>
@@ -909,26 +1121,35 @@ export default function Booking() {
                             type="tel"
                             name="phone"
                             value={formData.phone}
-                            onChange={handleChange}
+                            onChange={handleFieldChange}
+                            onBlur={() => handleBlur('phone')}
                             required
-                            className="w-full bg-dark-300 border border-gold-600/30 rounded-lg py-3 pl-11 pr-4 text-white placeholder-gray-500 focus:outline-none focus:border-gold-500 transition-colors"
+                            className={`w-full bg-dark-300 border rounded-lg py-3 pl-11 pr-4 text-white placeholder-gray-500 focus:outline-none focus:border-gold-500 transition-colors ${
+                              errors.phone && touched.phone ? 'border-red-500' : 'border-gold-600/30'
+                            }`}
                             placeholder="+94 XXX XXX XXX"
                           />
                         </div>
+                        {errors.phone && touched.phone && (
+                          <p className="mt-2 text-sm text-red-400">{errors.phone}</p>
+                        )}
                       </div>
 
                       <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Special Requests or Notes
+                          Special Requests or Notes (Optional)
                         </label>
                         <textarea
                           name="notes"
                           value={formData.notes}
-                          onChange={handleChange}
+                          onChange={handleFieldChange}
                           rows={3}
                           className="w-full bg-dark-300 border border-gold-600/30 rounded-lg py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:border-gold-500 transition-colors resize-none"
                           placeholder="Any special requests or notes for your stylist..."
                         />
+                        <p className="mt-1 text-xs text-gray-400">
+                          Max 500 characters
+                        </p>
                       </div>
                     </div>
                   )}
@@ -945,11 +1166,12 @@ export default function Booking() {
                     )}
                     <button
                       type="submit"
+                      disabled={isSendingOtp}
                       className={`gold-gradient text-dark-900 px-8 py-3 rounded-full font-semibold hover:shadow-lg hover:shadow-gold-500/30 transition-all duration-300 ${
                         step === 1 ? 'ml-auto' : ''
-                      }`}
+                      } ${isSendingOtp ? 'opacity-70 cursor-not-allowed' : ''}`}
                     >
-                      {step === 3 ? 'Send Verification Code' : 'Continue'}
+                      {isSendingOtp ? 'Sending Code...' : (step === 3 ? 'Send Verification Code' : 'Continue')}
                     </button>
                   </div>
                 </form>
@@ -1049,9 +1271,9 @@ export default function Booking() {
                   <div className="mb-4 p-3 bg-gold-500/5 rounded-lg border border-gold-500/20">
                     <p className="text-xs text-gray-400">
                       💡 {serviceCount === 1 ? 'Appointment fee: Rs.50 per service' : 
-                         serviceCount === 2 ? 'Appointment fee: Rs.50 per service (Total: Rs.100)' :
-                         serviceCount === 3 ? 'Appointment fee: Rs.50 per service (Total: Rs.150)' :
-                         `Appointment fee capped at Rs.${MAX_APPOINTMENT_FEE} for ${serviceCount} services (You save Rs.${serviceCount * APPOINTMENT_FEE_PER_SERVICE - MAX_APPOINTMENT_FEE})`}
+                          serviceCount === 2 ? 'Appointment fee: Rs.50 per service (Total: Rs.100)' :
+                          serviceCount === 3 ? 'Appointment fee: Rs.50 per service (Total: Rs.150)' :
+                          `Appointment fee capped at Rs.${MAX_APPOINTMENT_FEE} for ${serviceCount} services (You save Rs.${serviceCount * APPOINTMENT_FEE_PER_SERVICE - MAX_APPOINTMENT_FEE})`}
                     </p>
                   </div>
                 )}
