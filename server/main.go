@@ -38,6 +38,12 @@ func main() {
 	api.HandleFunc("/contact", handlers.GetContactByID).Methods("GET")
 	api.HandleFunc("/contact", handlers.DeleteContact).Methods("DELETE")
 
+	// Booking routes
+	api.HandleFunc("/bookings", handlers.CreateBooking).Methods("POST")
+	api.HandleFunc("/bookings", handlers.GetBooking).Methods("GET")
+	api.HandleFunc("/bookings/email", handlers.GetBookingsByEmail).Methods("GET")
+	api.HandleFunc("/bookings/status", handlers.UpdateBookingStatus).Methods("PUT")
+
 	// Health check endpoint
 	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

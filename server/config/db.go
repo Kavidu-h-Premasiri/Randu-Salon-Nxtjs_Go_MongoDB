@@ -12,6 +12,7 @@ import (
 
 var DB *mongo.Client
 var ContactCollection *mongo.Collection
+var BookingCollection *mongo.Collection
 
 func ConnectDB() error {
 	mongoURI := os.Getenv("MONGO_URI")
@@ -37,6 +38,7 @@ func ConnectDB() error {
 
 	DB = client
 	ContactCollection = client.Database("Randu_Salon").Collection("contacts")
+	BookingCollection = client.Database("Randu_Salon").Collection("bookings")
 
 	fmt.Println("Connected to MongoDB successfully!")
 	return nil
@@ -49,4 +51,9 @@ func DisconnectDB() error {
 		return DB.Disconnect(ctx)
 	}
 	return nil
+}
+
+// GetBookingCollection returns the bookings collection
+func GetBookingCollection() *mongo.Collection {
+	return BookingCollection
 }

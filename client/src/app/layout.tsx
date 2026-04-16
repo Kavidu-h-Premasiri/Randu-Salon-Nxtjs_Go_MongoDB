@@ -32,7 +32,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${playfair.variable} ${poppins.variable}`}>
+    <html lang="en" className={`${playfair.variable} ${poppins.variable}`} suppressHydrationWarning>
       <body className="min-h-full flex flex-col">
         {children}
       </body>

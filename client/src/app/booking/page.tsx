@@ -401,6 +401,46 @@ export default function Booking() {
     doc.save(`Booking_${bookingData.name.replace(/\s+/g, '_')}.pdf`);
   };
 
+  // --- SAVE BOOKING TO DATABASE ---
+  const saveBookingToDatabase = async (bookingData: any) => {
+    try {
+      const response = await fetch('/api/create-booking', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          services: bookingData.services,
+          stylist: bookingData.stylist,
+          date: bookingData.date,
+          time: bookingData.time,
+          finishingTime: bookingData.finishingTime,
+          name: bookingData.name,
+          email: bookingData.email,
+          phone: bookingData.phone,
+          notes: bookingData.notes,
+          totalPrice: bookingData.totalPrice,
+          appointmentFee: calculateAppointmentFee(),
+          servicesTotal: bookingData.services.reduce((sum: number, s: any) => sum + s.price, 0),
+          totalDuration: calculateTotalDuration(),
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log('Booking saved to database:', result.bookingId);
+        return true;
+      } else {
+        console.error('Failed to save booking:', result.message);
+        return false;
+      }
+    } catch (error) {
+      console.error('Error saving booking:', error);
+      return false;
+    }
+  };
+
   // --- OTP VERIFICATION LOGIC ---
   const handleSendOTP = async () => {
     // Final validation before sending OTP
@@ -450,7 +490,7 @@ export default function Booking() {
     }
   };
 
-  const handleVerifyAndConfirm = () => {
+  const handleVerifyAndConfirm = async () => {
     if (!otp || otp.length !== 6) {
       alert('Please enter the 6-digit verification code');
       return;
@@ -463,25 +503,32 @@ export default function Booking() {
         totalPrice: calculateTotalPrice(),
       };
       
-      generatePDF(summary);
-      alert('Booking Confirmed successfully! Your receipt has been downloaded.');
-      setIsVerifying(false);
+      // Save to MongoDB via Go backend
+      const saved = await saveBookingToDatabase(summary);
       
-      // Reset form
-      setStep(1);
-      setFormData({
-        services: [],
-        stylist: '',
-        date: '',
-        time: '',
-        name: '',
-        email: '',
-        phone: '',
-        notes: ''
-      });
-      setOtp('');
-      setErrors({});
-      setTouched({});
+      if (saved) {
+        generatePDF(summary);
+        alert('Booking Confirmed successfully! Your receipt has been downloaded and booking has been saved.');
+        setIsVerifying(false);
+        
+        // Reset form
+        setStep(1);
+        setFormData({
+          services: [],
+          stylist: '',
+          date: '',
+          time: '',
+          name: '',
+          email: '',
+          phone: '',
+          notes: ''
+        });
+        setOtp('');
+        setErrors({});
+        setTouched({});
+      } else {
+        alert('Booking confirmed but failed to save to database. Please contact support.');
+      }
     } else {
       alert('Invalid OTP. Please try again.');
       setOtp('');
