@@ -43,6 +43,8 @@ func main() {
 	api.HandleFunc("/bookings", handlers.GetBooking).Methods("GET")
 	api.HandleFunc("/bookings/email", handlers.GetBookingsByEmail).Methods("GET")
 	api.HandleFunc("/bookings/status", handlers.UpdateBookingStatus).Methods("PUT")
+	// Add this route with your other routes
+	api.HandleFunc("/bookings/all", handlers.GetAllBookings).Methods("GET")
 
 	// Health check endpoint
 	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {

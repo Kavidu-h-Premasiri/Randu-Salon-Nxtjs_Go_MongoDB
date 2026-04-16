@@ -252,3 +252,38 @@ func UpdateBookingStatus(w http.ResponseWriter, r *http.Request) {
 		"message": "Booking status updated successfully",
 	})
 }
+
+// GetAllBookings retrieves all bookings
+func GetAllBookings(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	bookingCollection := config.GetBookingCollection()
+
+	// Find all bookings
+	cursor, err := bookingCollection.Find(context.Background(), bson.M{})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"message": "Failed to fetch bookings",
+		})
+		return
+	}
+	defer cursor.Close(context.Background())
+
+	var bookings []models.Booking
+	if err = cursor.All(context.Background(), &bookings); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"message": "Failed to decode bookings",
+		})
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":  true,
+		"bookings": bookings,
+	})
+}

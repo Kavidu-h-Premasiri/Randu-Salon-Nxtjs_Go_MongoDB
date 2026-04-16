@@ -1,8 +1,8 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
-import { Calendar, Clock, User, Mail, Phone, CreditCard, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, ShieldCheck } from 'lucide-react';
+import { Calendar, Clock, User, Mail, Phone, CreditCard, X, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, ShieldCheck, AlertCircle } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 
 // Service data matching the services page
@@ -119,6 +119,12 @@ const generateTimeSlots = (startTime: string, endTime: string): string[] => {
   return slots;
 };
 
+interface BookedSlot {
+  stylist: string;
+  date: string;
+  time: string;
+}
+
 export default function Booking() {
   const [step, setStep] = useState(1);
   const [showCalendar, setShowCalendar] = useState(false);
@@ -135,6 +141,10 @@ export default function Booking() {
   const [generatedOtp, setGeneratedOtp] = useState('');
   const [isSendingOtp, setIsSendingOtp] = useState(false);
 
+  // Booked time slots from database
+  const [bookedSlots, setBookedSlots] = useState<BookedSlot[]>([]);
+  const [isLoadingBookings, setIsLoadingBookings] = useState(false);
+
   const [formData, setFormData] = useState({
     services: [] as Array<{ name: string; price: number; category: string; duration: number }>,
     stylist: '',
@@ -149,9 +159,45 @@ export default function Booking() {
   const stylists = [
     'Isabella Montgomery',
     'Marcus Chen',
-    'Sofia Rodriguez',
-    'Any Available Stylist'
+    'Sofia Rodriguez'
   ];
+
+  // Fetch existing bookings from database
+  const fetchBookings = async () => {
+    try {
+      setIsLoadingBookings(true);
+      const response = await fetch('/api/get-bookings');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.bookings) {
+          // Extract only stylist, date, and time from each booking
+          const slots: BookedSlot[] = data.bookings.map((booking: any) => ({
+            stylist: booking.stylist,
+            date: booking.date,
+            time: booking.time
+          }));
+          setBookedSlots(slots);
+          console.log('Fetched booked slots:', slots);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching bookings:', error);
+    } finally {
+      setIsLoadingBookings(false);
+    }
+  };
+
+  // Fetch bookings when component mounts
+  useEffect(() => {
+    fetchBookings();
+  }, []);
+
+  // Check if a time slot is already booked for the selected stylist and date
+  const isTimeSlotBooked = (stylist: string, date: string, time: string): boolean => {
+    return bookedSlots.some(
+      slot => slot.stylist === stylist && slot.date === date && slot.time === time
+    );
+  };
 
   // Validation functions
   const validateName = (name: string) => {
@@ -191,9 +237,10 @@ export default function Booking() {
     return '';
   };
 
-  const validateTime = (time: string, date: string, services: any[]) => {
+  const validateTime = (time: string, date: string, services: any[], stylist: string) => {
     if (!time) return 'Please select a time slot';
     if (services.length === 0) return 'Please select at least one service';
+    if (!stylist) return 'Please select a stylist first';
     
     // Check if time slot is valid for the selected date
     const [year, month, day] = date.split('-');
@@ -209,6 +256,11 @@ export default function Booking() {
     if (finishMinutes > endMinutes) return 'Appointment would end after business hours';
     if (slotMinutes > endMinutes - 60) return 'Please select an earlier time slot to complete your services';
     
+    // Check if the time slot is already booked for this stylist on this date
+    if (isTimeSlotBooked(stylist, date, time)) {
+      return `This time slot is already booked for ${stylist}. Please select another time.`;
+    }
+    
     return '';
   };
 
@@ -218,20 +270,30 @@ export default function Booking() {
     return '';
   };
 
+  const validateStylist = (stylist: string) => {
+    if (!stylist) return 'Please select a preferred stylist';
+    return '';
+  };
+
   const validateStep = (stepNumber: number) => {
     const newErrors: {[key: string]: string} = {};
     
     if (stepNumber === 1) {
       const serviceError = validateServices(formData.services);
       if (serviceError) newErrors.services = serviceError;
+      
+      const stylistError = validateStylist(formData.stylist);
+      if (stylistError) newErrors.stylist = stylistError;
     }
     else if (stepNumber === 2) {
       const dateError = validateDate(formData.date);
       if (dateError) newErrors.date = dateError;
       
-      if (formData.date) {
-        const timeError = validateTime(formData.time, formData.date, formData.services);
+      if (formData.date && formData.stylist) {
+        const timeError = validateTime(formData.time, formData.date, formData.services, formData.stylist);
         if (timeError) newErrors.time = timeError;
+      } else if (!formData.stylist) {
+        newErrors.stylist = 'Please select a stylist before choosing time';
       }
     }
     else if (stepNumber === 3) {
@@ -254,27 +316,34 @@ export default function Booking() {
   };
 
   const getAvailableTimeSlots = () => {
-    if (!formData.date) return [];
+    if (!formData.date || !formData.stylist) return [];
     
     const [year, month, day] = formData.date.split('-');
     const selectedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
     
     const hours = getBusinessHours(selectedDate);
-    
-    const startMinutes = timeToMinutes(hours.start);
-    const endMinutes = timeToMinutes(hours.end);
     const totalDuration = calculateTotalDuration();
     
     const allSlots = generateTimeSlots(hours.start, hours.end);
     
+    // Filter available slots - only show slots that are NOT booked and fit within business hours with duration
     return allSlots.filter(slot => {
       const slotMinutes = timeToMinutes(slot);
       const finishMinutes = slotMinutes + totalDuration;
-      const maxStartMinutes = endMinutes - 60;
+      const endMinutes = timeToMinutes(hours.end);
+      const maxStartMinutes = endMinutes - totalDuration;
       
-      return slotMinutes >= startMinutes && 
-             slotMinutes <= maxStartMinutes && 
-             finishMinutes <= endMinutes;
+      // Check if slot is within business hours
+      const isValidTime = slotMinutes >= timeToMinutes(hours.start) && 
+                          slotMinutes <= maxStartMinutes && 
+                          finishMinutes <= endMinutes;
+      
+      if (!isValidTime) return false;
+      
+      // Check if the slot is already booked for this stylist on this date
+      const isBooked = isTimeSlotBooked(formData.stylist, formData.date, slot);
+      
+      return !isBooked;
     });
   };
 
@@ -366,7 +435,7 @@ export default function Booking() {
 
     addField('Date', bookingData.date);
     addField('Time Slot', `${bookingData.time} - ${bookingData.finishingTime}`);
-    addField('Stylist', bookingData.stylist || 'Any Available Stylist');
+    addField('Stylist', bookingData.stylist);
     
     yPos += 5;
     doc.setDrawColor(gold[0], gold[1], gold[2]);
@@ -430,6 +499,8 @@ export default function Booking() {
       
       if (result.success) {
         console.log('Booking saved to database:', result.bookingId);
+        // Refresh bookings after saving
+        await fetchBookings();
         return true;
       } else {
         console.error('Failed to save booking:', result.message);
@@ -731,6 +802,11 @@ export default function Booking() {
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
+    
+    // Reset time when stylist changes
+    if (name === 'stylist') {
+      setFormData(prev => ({ ...prev, time: '' }));
+    }
   };
 
   const handleBlur = (fieldName: string) => {
@@ -748,6 +824,9 @@ export default function Booking() {
       case 'phone':
         error = validatePhone(formData.phone);
         break;
+      case 'stylist':
+        error = validateStylist(formData.stylist);
+        break;
     }
     if (error) {
       setErrors(prev => ({ ...prev, [fieldName]: error }));
@@ -761,13 +840,20 @@ export default function Booking() {
       if (validateStep(1)) {
         setStep(2);
       } else {
-        alert(errors.services || 'Please fix the errors before proceeding');
+        // Show specific error messages
+        if (errors.services) {
+          alert(errors.services);
+        } else if (errors.stylist) {
+          alert(errors.stylist);
+        } else {
+          alert('Please fix the errors before proceeding');
+        }
       }
     } else if (step === 2) {
       if (validateStep(2)) {
         setStep(3);
       } else {
-        alert(errors.date || errors.time || 'Please fix the errors before proceeding');
+        alert(errors.date || errors.time || errors.stylist || 'Please fix the errors before proceeding');
       }
     } else {
       handleSendOTP();
@@ -952,7 +1038,10 @@ export default function Booking() {
                         </div>
                         
                         {errors.services && touched.services && (
-                          <p className="mt-2 text-sm text-red-400">{errors.services}</p>
+                          <div className="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start space-x-2">
+                            <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                            <p className="text-sm text-red-400">{errors.services}</p>
+                          </div>
                         )}
                         
                         {formData.services.length > 0 && (
@@ -966,7 +1055,7 @@ export default function Booking() {
 
                       <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Preferred Stylist (Optional)
+                          Preferred Stylist *
                         </label>
                         <div className="relative">
                           <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gold-500" />
@@ -974,14 +1063,53 @@ export default function Booking() {
                             name="stylist"
                             value={formData.stylist}
                             onChange={handleFieldChange}
-                            className="w-full bg-dark-300 border border-gold-600/30 rounded-lg py-3 pl-11 pr-4 text-white focus:outline-none focus:border-gold-500 transition-colors"
+                            onBlur={() => handleBlur('stylist')}
+                            className={`w-full bg-dark-300 rounded-lg py-3 pl-11 pr-4 text-white focus:outline-none focus:border-gold-500 transition-colors appearance-none cursor-pointer ${
+                              errors.stylist && touched.stylist 
+                                ? 'border-red-500 border-2 bg-red-500/5' 
+                                : formData.stylist 
+                                  ? 'border-gold-500 border bg-gold-500/5'
+                                  : 'border border-gold-600/30'
+                            }`}
                           >
-                            <option value="">Choose a stylist</option>
+                            <option value="" className="text-gray-400">-- Choose your preferred stylist --</option>
                             {stylists.map((stylist) => (
-                              <option key={stylist} value={stylist}>{stylist}</option>
+                              <option key={stylist} value={stylist} className="text-white">
+                                ✨ {stylist}
+                              </option>
                             ))}
                           </select>
+                          <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gold-500 pointer-events-none" />
                         </div>
+                        
+                        {/* Beautiful Stylist Error Message */}
+                        {errors.stylist && touched.stylist && (
+                          <div className="mt-3 animate-slide-down">
+                            <div className="bg-gradient-to-r from-red-500/10 to-red-600/5 border-l-4 border-red-500 rounded-r-lg p-3 flex items-start space-x-3">
+                              <div className="flex-shrink-0">
+                                <div className="w-8 h-8 bg-red-500/20 rounded-full flex items-center justify-center">
+                                  <AlertCircle className="w-4 h-4 text-red-400" />
+                                </div>
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-sm font-semibold text-red-400">Stylist Selection Required</p>
+                                <p className="text-xs text-red-300/80 mt-0.5">{errors.stylist}</p>
+                                <p className="text-xs text-gray-400 mt-1.5 flex items-center space-x-1">
+                                  <span>💡</span>
+                                  <span>Choose from our expert stylists to ensure the best experience</span>
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Success Message when stylist is selected */}
+                        {formData.stylist && !errors.stylist && (
+                          <div className="mt-2 flex items-center space-x-2 text-xs text-green-400">
+                            <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></div>
+                            <span>✓ Stylist selected: {formData.stylist}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -992,6 +1120,15 @@ export default function Booking() {
                         Choose Date & Time
                       </h3>
                       
+                      {!formData.stylist && (
+                        <div className="mb-4 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                          <p className="text-yellow-400 text-sm flex items-center space-x-2">
+                            <AlertCircle className="w-4 h-4" />
+                            <span>Please select a stylist first to see available time slots</span>
+                          </p>
+                        </div>
+                      )}
+                      
                       <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
                           Select Date *
@@ -1000,15 +1137,22 @@ export default function Booking() {
                           <button
                             type="button"
                             onClick={() => setShowCalendar(!showCalendar)}
-                            className={`w-full bg-dark-300 border rounded-lg py-3 pl-11 pr-4 text-left text-white focus:outline-none focus:border-gold-500 transition-colors hover:bg-dark-200 ${
-                              errors.date ? 'border-red-500' : 'border-gold-600/30'
+                            disabled={!formData.stylist}
+                            className={`w-full bg-dark-300 border rounded-lg py-3 pl-11 pr-4 text-left text-white focus:outline-none focus:border-gold-500 transition-colors ${
+                              !formData.stylist 
+                                ? 'opacity-50 cursor-not-allowed border-gold-600/30'
+                                : errors.date 
+                                  ? 'border-red-500 hover:bg-dark-200' 
+                                  : 'border-gold-600/30 hover:bg-dark-200'
                             }`}
                           >
-                            {formData.date || 'Click calendar icon to select date'}
+                            {formData.date || (formData.stylist ? 'Click calendar icon to select date' : 'Select a stylist first')}
                           </button>
                           <Calendar 
-                            className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gold-500 cursor-pointer"
-                            onClick={() => setShowCalendar(!showCalendar)}
+                            className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 ${
+                              formData.stylist ? 'text-gold-500 cursor-pointer' : 'text-gray-500 cursor-not-allowed'
+                            }`}
+                            onClick={() => formData.stylist && setShowCalendar(!showCalendar)}
                           />
                           {formData.date && (
                             <button
@@ -1019,7 +1163,7 @@ export default function Booking() {
                               <X className="w-4 h-4 text-gray-400 hover:text-white" />
                             </button>
                           )}
-                          {showCalendar && renderCalendar()}
+                          {showCalendar && formData.stylist && renderCalendar()}
                         </div>
                         {errors.date && <p className="mt-2 text-sm text-red-400">{errors.date}</p>}
                         {formData.date && businessHours && (
@@ -1034,47 +1178,72 @@ export default function Booking() {
                           <label className="block text-sm font-medium text-gray-300">
                             Select Time *
                           </label>
-                          {formData.date && availableTimeSlots.length > 0 && (
+                          {formData.date && formData.stylist && availableTimeSlots.length > 0 && (
                             <span className="text-xs text-green-400 bg-green-400/10 px-2 py-1 rounded-full">
-                              {availableTimeSlots.length} slots available
+                              {availableTimeSlots.length} slots available for {formData.stylist}
+                            </span>
+                          )}
+                          {formData.date && formData.stylist && availableTimeSlots.length === 0 && (
+                            <span className="text-xs text-orange-400 bg-orange-400/10 px-2 py-1 rounded-full">
+                              No available slots
                             </span>
                           )}
                         </div>
 
-                        {!formData.date ? (
+                        {!formData.stylist ? (
+                          <div className="p-6 border border-dashed border-yellow-600/30 rounded-xl text-center bg-yellow-500/5">
+                            <User className="w-8 h-8 text-yellow-500/50 mx-auto mb-2" />
+                            <p className="text-yellow-400 text-sm">Please select a stylist first to see available time slots.</p>
+                          </div>
+                        ) : !formData.date ? (
                           <div className="p-6 border border-dashed border-gold-600/30 rounded-xl text-center">
-                            <Clock className="w-8 h-8 text-gold-500/50 mx-auto mb-2" />
-                            <p className="text-gray-400 text-sm">Please select a date to see available times.</p>
+                            <Calendar className="w-8 h-8 text-gold-500/50 mx-auto mb-2" />
+                            <p className="text-gray-400 text-sm">Please select a date to see available times for {formData.stylist}.</p>
                           </div>
                         ) : availableTimeSlots.length === 0 ? (
                           <div className="p-6 border border-dashed border-red-500/30 bg-red-500/5 rounded-xl text-center">
+                            <Clock className="w-8 h-8 text-red-500/50 mx-auto mb-2" />
                             <p className="text-red-400 text-sm">
-                              No available time slots for the selected date. <br/>
-                              Please choose another date or reduce service duration.
+                              No available time slots for {formData.stylist} on {formData.date}. <br/>
+                              Please choose another date or select a different stylist.
                             </p>
                           </div>
                         ) : (
                           <>
                             <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-[280px] overflow-y-auto pr-2 custom-scrollbar">
-                              {availableTimeSlots.map((slot) => (
-                                <button
-                                  type="button"
-                                  key={slot}
-                                  onClick={() => {
-                                    setFormData({ ...formData, time: slot });
-                                    setErrors(prev => ({ ...prev, time: '' }));
-                                  }}
-                                  className={`p-3 rounded-xl text-sm font-medium border transition-all duration-200 flex items-center justify-center ${
-                                    formData.time === slot
-                                      ? 'bg-gold-500 border-gold-500 text-dark-900 shadow-[0_0_15px_rgba(212,175,55,0.25)]'
-                                      : 'bg-dark-300 border-gold-600/30 text-gray-300 hover:border-gold-500/70 hover:text-white hover:bg-dark-200'
-                                  }`}
-                                >
-                                  {slot}
-                                </button>
-                              ))}
+                              {availableTimeSlots.map((slot) => {
+                                const isBooked = isTimeSlotBooked(formData.stylist, formData.date, slot);
+                                return (
+                                  <button
+                                    type="button"
+                                    key={slot}
+                                    onClick={() => {
+                                      if (!isBooked) {
+                                        setFormData({ ...formData, time: slot });
+                                        setErrors(prev => ({ ...prev, time: '' }));
+                                      }
+                                    }}
+                                    disabled={isBooked}
+                                    className={`p-3 rounded-xl text-sm font-medium border transition-all duration-200 flex items-center justify-center ${
+                                      formData.time === slot
+                                        ? 'bg-gold-500 border-gold-500 text-dark-900 shadow-[0_0_15px_rgba(212,175,55,0.25)]'
+                                        : isBooked
+                                          ? 'bg-red-500/10 border-red-500/30 text-red-400 cursor-not-allowed line-through'
+                                          : 'bg-dark-300 border-gold-600/30 text-gray-300 hover:border-gold-500/70 hover:text-white hover:bg-dark-200'
+                                    }`}
+                                  >
+                                    {slot}
+                                    {isBooked && <span className="ml-1 text-xs">(Booked)</span>}
+                                  </button>
+                                );
+                              })}
                             </div>
                             {errors.time && <p className="mt-2 text-sm text-red-400">{errors.time}</p>}
+                            {availableTimeSlots.length > 0 && (
+                              <p className="mt-3 text-xs text-gray-400 text-center">
+                                Showing available slots for {formData.stylist} on {formData.date}
+                              </p>
+                            )}
                           </>
                         )}
                       </div>
@@ -1329,7 +1498,12 @@ export default function Booking() {
                 <div className="space-y-3 text-sm">
                   <div>
                     <p className="text-gray-400">Stylist</p>
-                    <p className="text-white font-semibold">{formData.stylist || 'Not selected'}</p>
+                    <p className={`font-semibold ${formData.stylist ? 'text-gold-400' : 'text-red-400'}`}>
+                      {formData.stylist || 'Not selected'}
+                    </p>
+                    {!formData.stylist && (
+                      <p className="text-xs text-red-400/70 mt-1">⚠️ Please select a stylist</p>
+                    )}
                   </div>
                   {formData.date && (
                     <div>
@@ -1377,6 +1551,22 @@ export default function Booking() {
       </section>
 
       <Footer />
+
+      <style jsx>{`
+        @keyframes slide-down {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        .animate-slide-down {
+          animation: slide-down 0.3s ease-out;
+        }
+      `}</style>
     </main>
   );
 }
