@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Menu, X, Scissors, ChevronDown } from 'lucide-react';
+import { Menu, X, Scissors, ChevronDown, Shield } from 'lucide-react';
 
 interface NavItem {
   name: string;
@@ -104,6 +104,16 @@ const Navbar = () => {
                 )}
               </div>
             ))}
+            
+            {/* Admin Login Link - Desktop */}
+            <Link
+              href="/admin/login"
+              className="flex items-center gap-2 px-4 py-2 rounded-full border border-gold-500/50 text-gold-400 hover:text-gold-300 hover:border-gold-400 hover:bg-gold-500/10 transition-all duration-300 font-medium"
+            >
+              <Shield className="w-4 h-4" />
+              Admin
+            </Link>
+            
             <Link
               href="/booking"
               className="gold-gradient text-dark-900 px-6 py-2 rounded-full font-semibold hover:shadow-lg hover:shadow-gold-500/30 transition-all duration-300 hover:scale-105 transform"
@@ -166,6 +176,17 @@ const Navbar = () => {
                 )}
               </div>
             ))}
+            
+            {/* Admin Login Link - Mobile */}
+            <Link
+              href="/admin/login"
+              className="flex items-center justify-center gap-2 w-full mt-2 py-3 border border-gold-500/50 rounded-full text-gold-400 hover:text-gold-300 hover:border-gold-400 hover:bg-gold-500/10 transition-all duration-300 font-medium"
+              onClick={() => setIsOpen(false)}
+            >
+              <Shield className="w-4 h-4" />
+              Admin Login
+            </Link>
+            
             <Link
               href="/booking"
               className="block w-full mt-4 gold-gradient text-dark-900 px-6 py-3 rounded-full font-semibold text-center hover:shadow-lg hover:shadow-gold-500/30 transition-all duration-300"
