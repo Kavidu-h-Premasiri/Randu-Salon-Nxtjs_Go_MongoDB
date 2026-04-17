@@ -100,6 +100,16 @@ const timeToMinutes = (timeStr: string): number => {
   return hours * 60 + minutes;
 };
 
+// Convert minutes to time string
+const minutesToTime = (minutes: number): string => {
+  const hours24 = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  const period = hours24 >= 12 ? 'PM' : 'AM';
+  let hours12 = hours24 % 12;
+  if (hours12 === 0) hours12 = 12;
+  return `${hours12}:${mins.toString().padStart(2, '0')} ${period}`;
+};
+
 // Generate time slots in 30-minute increments
 const generateTimeSlots = (startTime: string, endTime: string): string[] => {
   const slots: string[] = [];
@@ -107,13 +117,7 @@ const generateTimeSlots = (startTime: string, endTime: string): string[] => {
   const endMinutes = timeToMinutes(endTime);
   
   for (let minutes = startMinutes; minutes < endMinutes; minutes += 30) {
-    const hours24 = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    const period = hours24 >= 12 ? 'PM' : 'AM';
-    let hours12 = hours24 % 12;
-    if (hours12 === 0) hours12 = 12;
-    const timeStr = `${hours12}:${mins.toString().padStart(2, '0')} ${period}`;
-    slots.push(timeStr);
+    slots.push(minutesToTime(minutes));
   }
   
   return slots;
@@ -122,8 +126,41 @@ const generateTimeSlots = (startTime: string, endTime: string): string[] => {
 interface BookedSlot {
   stylist: string;
   date: string;
-  time: string;
+  startTime: string;
+  endTime: string;
+  duration: number;
 }
+
+// Helper function to check if a time slot overlaps with any booked appointment
+const isTimeSlotOverlapping = (
+  slotTime: string,
+  slotDuration: number,
+  bookedSlots: BookedSlot[],
+  stylist: string,
+  date: string,
+  excludeCurrentBookingId?: string
+): boolean => {
+  const slotStartMinutes = timeToMinutes(slotTime);
+  const slotEndMinutes = slotStartMinutes + slotDuration;
+  
+  return bookedSlots.some(booking => {
+    // Skip if we're excluding a specific booking (for updates)
+    if (excludeCurrentBookingId && (booking as any)._id === excludeCurrentBookingId) {
+      return false;
+    }
+    
+    // Only check for same stylist and date
+    if (booking.stylist !== stylist || booking.date !== date) {
+      return false;
+    }
+    
+    const bookedStartMinutes = timeToMinutes(booking.startTime);
+    const bookedEndMinutes = timeToMinutes(booking.endTime);
+    
+    // Check for overlap: existing booking ends after slot starts AND existing booking starts before slot ends
+    return (bookedEndMinutes > slotStartMinutes && bookedStartMinutes < slotEndMinutes);
+  });
+};
 
 export default function Booking() {
   const [step, setStep] = useState(1);
@@ -170,11 +207,13 @@ export default function Booking() {
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.bookings) {
-          // Extract only stylist, date, and time from each booking
+          // Extract stylist, date, startTime, endTime, and duration from each booking
           const slots: BookedSlot[] = data.bookings.map((booking: any) => ({
             stylist: booking.stylist,
             date: booking.date,
-            time: booking.time
+            startTime: booking.time,
+            endTime: booking.finishingTime || calculateEndTime(booking.time, booking.totalDuration || 0),
+            duration: booking.totalDuration || 0
           }));
           setBookedSlots(slots);
           console.log('Fetched booked slots:', slots);
@@ -187,16 +226,21 @@ export default function Booking() {
     }
   };
 
+  // Helper to calculate end time
+  const calculateEndTime = (startTime: string, durationMinutes: number): string => {
+    const startMinutes = timeToMinutes(startTime);
+    const endMinutes = startMinutes + durationMinutes;
+    return minutesToTime(endMinutes);
+  };
+
   // Fetch bookings when component mounts
   useEffect(() => {
     fetchBookings();
   }, []);
 
-  // Check if a time slot is already booked for the selected stylist and date
-  const isTimeSlotBooked = (stylist: string, date: string, time: string): boolean => {
-    return bookedSlots.some(
-      slot => slot.stylist === stylist && slot.date === date && slot.time === time
-    );
+  // Check if a time slot is available (not overlapping with any booked appointment)
+  const isTimeSlotAvailable = (stylist: string, date: string, time: string, duration: number): boolean => {
+    return !isTimeSlotOverlapping(time, duration, bookedSlots, stylist, date);
   };
 
   // Validation functions
@@ -256,9 +300,9 @@ export default function Booking() {
     if (finishMinutes > endMinutes) return 'Appointment would end after business hours';
     if (slotMinutes > endMinutes - 60) return 'Please select an earlier time slot to complete your services';
     
-    // Check if the time slot is already booked for this stylist on this date
-    if (isTimeSlotBooked(stylist, date, time)) {
-      return `This time slot is already booked for ${stylist}. Please select another time.`;
+    // Check if the time slot overlaps with any existing booking for this stylist on this date
+    if (!isTimeSlotAvailable(stylist, date, time, totalDuration)) {
+      return `This time slot overlaps with an existing booking for ${stylist}. Please select another time.`;
     }
     
     return '';
@@ -326,7 +370,7 @@ export default function Booking() {
     
     const allSlots = generateTimeSlots(hours.start, hours.end);
     
-    // Filter available slots - only show slots that are NOT booked and fit within business hours with duration
+    // Filter available slots - only show slots that don't overlap with any existing booking
     return allSlots.filter(slot => {
       const slotMinutes = timeToMinutes(slot);
       const finishMinutes = slotMinutes + totalDuration;
@@ -340,10 +384,10 @@ export default function Booking() {
       
       if (!isValidTime) return false;
       
-      // Check if the slot is already booked for this stylist on this date
-      const isBooked = isTimeSlotBooked(formData.stylist, formData.date, slot);
+      // Check if the slot overlaps with any existing booking for this stylist on this date
+      const isAvailable = isTimeSlotAvailable(formData.stylist, formData.date, slot, totalDuration);
       
-      return !isBooked;
+      return isAvailable;
     });
   };
 
@@ -364,14 +408,7 @@ export default function Booking() {
     if (period === 'AM' && hours === 12) hours = 0;
     
     const endMinutesTotal = hours * 60 + minutes + totalDuration;
-    const endHours24 = Math.floor(endMinutesTotal / 60) % 24;
-    const endMins = endMinutesTotal % 60;
-    
-    const endPeriod = endHours24 >= 12 ? 'PM' : 'AM';
-    let endHours12 = endHours24 % 12;
-    if (endHours12 === 0) endHours12 = 12;
-    
-    return `${endHours12}:${endMins.toString().padStart(2, '0')} ${endPeriod}`;
+    return minutesToTime(endMinutesTotal);
   };
 
   const calculateAppointmentFee = () => {
@@ -1054,8 +1091,8 @@ export default function Booking() {
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Preferred Stylist *
+                        <label className="block text-sm font-medium text-gold-400 mb-2">
+                          Preferred Stylist
                         </label>
                         <div className="relative">
                           <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gold-500" />
@@ -1064,17 +1101,17 @@ export default function Booking() {
                             value={formData.stylist}
                             onChange={handleFieldChange}
                             onBlur={() => handleBlur('stylist')}
-                            className={`w-full bg-dark-300 rounded-lg py-3 pl-11 pr-4 text-white focus:outline-none focus:border-gold-500 transition-colors appearance-none cursor-pointer ${
+                            className={`w-full bg-black/40 backdrop-blur-sm rounded-lg py-3 pl-11 pr-4 text-white focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500 transition-all appearance-none cursor-pointer ${
                               errors.stylist && touched.stylist 
                                 ? 'border-red-500 border-2 bg-red-500/5' 
                                 : formData.stylist 
-                                  ? 'border-gold-500 border bg-gold-500/5'
-                                  : 'border border-gold-600/30'
+                                  ? 'border-gold-500 border bg-gradient-to-r from-gold-500/10 to-black/40'
+                                  : 'border border-gold-600/30 hover:border-gold-500/50'
                             }`}
                           >
-                            <option value="" className="text-gray-400">-- Choose your preferred stylist --</option>
+                            <option value="" className="text-gray-400 bg-black">-- Choose your preferred stylist --</option>
                             {stylists.map((stylist) => (
-                              <option key={stylist} value={stylist} className="text-white">
+                              <option key={stylist} value={stylist} className="text-white bg-black">
                                 ✨ {stylist}
                               </option>
                             ))}
@@ -1105,8 +1142,8 @@ export default function Booking() {
                         
                         {/* Success Message when stylist is selected */}
                         {formData.stylist && !errors.stylist && (
-                          <div className="mt-2 flex items-center space-x-2 text-xs text-green-400">
-                            <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></div>
+                          <div className="mt-2 flex items-center space-x-2 text-xs text-gold-400">
+                            <div className="w-1.5 h-1.5 bg-gold-400 rounded-full animate-pulse"></div>
                             <span>✓ Stylist selected: {formData.stylist}</span>
                           </div>
                         )}
@@ -1212,28 +1249,28 @@ export default function Booking() {
                           <>
                             <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-[280px] overflow-y-auto pr-2 custom-scrollbar">
                               {availableTimeSlots.map((slot) => {
-                                const isBooked = isTimeSlotBooked(formData.stylist, formData.date, slot);
+                                const isAvailable = isTimeSlotAvailable(formData.stylist, formData.date, slot, totalDuration);
                                 return (
                                   <button
                                     type="button"
                                     key={slot}
                                     onClick={() => {
-                                      if (!isBooked) {
+                                      if (isAvailable) {
                                         setFormData({ ...formData, time: slot });
                                         setErrors(prev => ({ ...prev, time: '' }));
                                       }
                                     }}
-                                    disabled={isBooked}
+                                    disabled={!isAvailable}
                                     className={`p-3 rounded-xl text-sm font-medium border transition-all duration-200 flex items-center justify-center ${
                                       formData.time === slot
                                         ? 'bg-gold-500 border-gold-500 text-dark-900 shadow-[0_0_15px_rgba(212,175,55,0.25)]'
-                                        : isBooked
+                                        : !isAvailable
                                           ? 'bg-red-500/10 border-red-500/30 text-red-400 cursor-not-allowed line-through'
                                           : 'bg-dark-300 border-gold-600/30 text-gray-300 hover:border-gold-500/70 hover:text-white hover:bg-dark-200'
                                     }`}
                                   >
                                     {slot}
-                                    {isBooked && <span className="ml-1 text-xs">(Booked)</span>}
+                                    {!isAvailable && <span className="ml-1 text-xs">(Booked)</span>}
                                   </button>
                                 );
                               })}
