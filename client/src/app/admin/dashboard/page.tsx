@@ -15,7 +15,6 @@ import {
   Eye, 
   CheckCircle, 
   XCircle, 
-  Clock as ClockIcon,
   LogOut,
   Menu,
   X,
@@ -32,7 +31,6 @@ import {
   ChevronDown,
   ChevronUp,
   Printer,
-  Undo,
   Timer
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
@@ -74,7 +72,7 @@ interface Countdown {
   isPast: boolean;
 }
 
-const API_BASE_URL = 'http://localhost:8080/api'; // Pointing directly to Go backend
+const API_BASE_URL = 'http://localhost:8080/api';
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -83,7 +81,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('appointments');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -100,11 +98,9 @@ export default function AdminDashboard() {
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   
-  // Confirmation modal state
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingStatusUpdate, setPendingStatusUpdate] = useState<{ id: string; newStatus: Appointment['status']; appointmentName: string; oldStatus: Appointment['status'] } | null>(null);
 
-  // Check authentication on mount
   useEffect(() => {
     const isAuthenticated = localStorage.getItem('adminAuthenticated');
     if (!isAuthenticated) {
@@ -112,7 +108,6 @@ export default function AdminDashboard() {
     }
   }, [router]);
 
-  // Calculate countdown for each appointment
   const calculateCountdown = (date: string, time: string): Countdown => {
     const [year, month, day] = date.split('-');
     const timeMatch = time.match(/(\d+):(\d+)\s*(AM|PM)/i);
@@ -152,7 +147,6 @@ export default function AdminDashboard() {
     };
   };
 
-  // Update all countdowns
   const updateCountdowns = () => {
     const newCountdowns = new Map<string, Countdown>();
     appointments.forEach(app => {
@@ -164,14 +158,12 @@ export default function AdminDashboard() {
     setCountdowns(newCountdowns);
   };
 
-  // Run countdown timer every second
   useEffect(() => {
     updateCountdowns();
     const interval = setInterval(updateCountdowns, 1000);
     return () => clearInterval(interval);
   }, [appointments]);
 
-  // Fetch appointments
   const fetchAppointments = async () => {
     try {
       setLoading(true);
@@ -228,7 +220,6 @@ export default function AdminDashboard() {
   const calculateStats = (data: Appointment[]) => {
     const today = new Date().toISOString().split('T')[0];
     
-    // Revenue only from non-cancelled appointments
     const totalRevenue = data
       .filter(apt => apt.status !== 'cancelled')
       .reduce((sum, apt) => sum + (apt.totalPrice || 0), 0);
@@ -248,13 +239,11 @@ export default function AdminDashboard() {
     });
   };
 
-  // Show confirmation modal before updating status
   const requestStatusUpdate = (id: string, newStatus: Appointment['status'], appointmentName: string, oldStatus: Appointment['status']) => {
     setPendingStatusUpdate({ id, newStatus, appointmentName, oldStatus });
     setShowConfirmModal(true);
   };
 
-  // Execute the status update after confirmation
   const executeStatusUpdate = async () => {
     if (!pendingStatusUpdate) return;
     
@@ -281,7 +270,6 @@ export default function AdminDashboard() {
           setSelectedAppointment({ ...selectedAppointment, status: newStatus });
         }
         
-        // Update Email notification (Assuming Next.js API handles emails)
         const appointment = appointments.find(apt => apt._id === id);
         if (appointment) {
           fetch('/api/send-status-update', {
@@ -318,7 +306,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // Cancel status update
   const cancelStatusUpdate = () => {
     setShowConfirmModal(false);
     setPendingStatusUpdate(null);
@@ -509,8 +496,8 @@ export default function AdminDashboard() {
     }
     return (
       <div className="flex items-center space-x-1 text-xs">
-        <Timer className="w-3 h-3 text-gold-400" />
-        <span className="text-gold-400 font-mono">
+        <Timer className="w-3 h-3 text-gold-400 flex-shrink-0" />
+        <span className="text-gold-400 font-mono whitespace-nowrap">
           {countdown.days > 0 && `${countdown.days}d `}
           {countdown.hours}h {countdown.minutes}m {countdown.seconds}s
         </span>
@@ -573,7 +560,7 @@ export default function AdminDashboard() {
       {/* Confirmation Modal */}
       {showConfirmModal && pendingStatusUpdate && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center px-4 bg-dark-900/90 backdrop-blur-sm">
-          <div className="bg-dark-800 rounded-2xl border border-gold-600/30 max-w-md w-full p-6 animate-fade-in shadow-2xl">
+          <div className="bg-dark-800 rounded-2xl border border-gold-600/30 max-w-md w-full p-6 animate-fade-in shadow-2xl mx-4">
             <div className="text-center mb-6">
               <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
                 pendingStatusUpdate.newStatus === 'confirmed' ? 'bg-green-500/20' :
@@ -590,7 +577,7 @@ export default function AdminDashboard() {
               </p>
             </div>
             
-            <div className="flex gap-4">
+            <div className="flex flex-col sm:flex-row gap-4">
               <button
                 onClick={cancelStatusUpdate}
                 className="flex-1 py-3 border border-gray-600 text-gray-400 rounded-xl font-semibold hover:bg-gray-800 transition-all"
@@ -620,31 +607,48 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {/* Mobile Menu Button - Fixed Top Left */}
+      <button
+        onClick={() => setSidebarOpen(true)}
+        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-dark-800 rounded-lg border border-gold-600/30 text-gold-400 hover:bg-dark-700 transition-all"
+      >
+        <Menu className="w-5 h-5" />
+      </button>
+
+      {/* Sidebar Overlay */}
+      {sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-dark-900/80 backdrop-blur-sm z-40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+      
       {/* Sidebar */}
-      <div className={`fixed top-0 left-0 h-full z-50 transition-all duration-300 ${sidebarOpen ? 'w-72' : 'w-20'} bg-dark-800/95 backdrop-blur-md border-r border-gold-600/30`}>
+      <div className={`fixed top-0 left-0 h-full z-50 transition-all duration-300 transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 w-72 bg-dark-800/95 backdrop-blur-md border-r border-gold-600/30`}>
         <div className="flex flex-col h-full">
           <div className="flex items-center justify-between p-6 border-b border-gold-600/30">
-            <div className={`flex items-center space-x-3 ${!sidebarOpen && 'justify-center w-full'}`}>
+            <div className="flex items-center space-x-3">
               <Scissors className="w-8 h-8 text-gold-400 flex-shrink-0" />
-              {sidebarOpen && (
-                <span className="text-xl font-bold bg-gradient-to-r from-gold-400 to-gold-600 bg-clip-text text-transparent">
-                  Admin Panel
-                </span>
-              )}
+              <span className="text-xl font-bold bg-gradient-to-r from-gold-400 to-gold-600 bg-clip-text text-transparent">
+                Admin Panel
+              </span>
             </div>
             <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="text-gold-400 hover:text-gold-300 transition-colors"
+              onClick={() => setSidebarOpen(false)}
+              className="lg:hidden text-gold-400 hover:text-gold-300 transition-colors"
             >
-              {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              <X className="w-5 h-5" />
             </button>
           </div>
 
-          <nav className="flex-1 py-6">
+          <nav className="flex-1 py-6 overflow-y-auto">
             {navItems.map((item) => (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  setSidebarOpen(false);
+                }}
                 className={`w-full flex items-center px-6 py-3 transition-all duration-300 group ${
                   activeTab === item.id
                     ? 'bg-gold-500/10 border-r-2 border-gold-500 text-gold-400'
@@ -654,9 +658,9 @@ export default function AdminDashboard() {
                 <div className="flex items-center justify-between w-full">
                   <div className="flex items-center space-x-3">
                     {item.icon}
-                    {sidebarOpen && <span>{item.label}</span>}
+                    <span>{item.label}</span>
                   </div>
-                  {sidebarOpen && item.count !== undefined && (
+                  {item.count !== undefined && (
                     <span className="text-xs bg-gold-500/20 text-gold-400 px-2 py-0.5 rounded-full">
                       {item.count}
                     </span>
@@ -672,31 +676,31 @@ export default function AdminDashboard() {
               className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-red-400 hover:bg-red-500/10 transition-all duration-300"
             >
               <LogOut className="w-5 h-5" />
-              {sidebarOpen && <span>Logout</span>}
+              <span>Logout</span>
             </button>
           </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className={`transition-all duration-300 ${sidebarOpen ? 'ml-72' : 'ml-20'}`}>
+      <div className="lg:ml-72">
         {/* Top Bar */}
-        <div className="sticky top-0 z-40 bg-dark-800/95 backdrop-blur-md border-b border-gold-600/30 px-8 py-4">
-          <div className="flex items-center justify-between">
+        <div className="sticky top-0 z-30 bg-dark-800/95 backdrop-blur-md border-b border-gold-600/30 px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-gold-400 to-gold-600 bg-clip-text text-transparent">
+              <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-gold-400 to-gold-600 bg-clip-text text-transparent">
                 {activeTab === 'appointments' && 'Appointment Management'}
                 {activeTab === 'analytics' && 'Analytics Dashboard'}
                 {activeTab === 'clients' && 'Client Management'}
                 {activeTab === 'settings' && 'Settings'}
               </h1>
-              <p className="text-gray-400 text-sm mt-1">
+              <p className="text-gray-400 text-xs sm:text-sm mt-1">
                 Welcome back, Administrator
               </p>
             </div>
             <button
               onClick={fetchAppointments}
-              className="flex items-center space-x-2 px-4 py-2 bg-gold-500/10 border border-gold-500/30 rounded-xl text-gold-400 hover:bg-gold-500/20 transition-all duration-300"
+              className="flex items-center justify-center space-x-2 px-3 sm:px-4 py-2 bg-gold-500/10 border border-gold-500/30 rounded-xl text-gold-400 hover:bg-gold-500/20 transition-all duration-300 text-sm sm:text-base"
             >
               <RefreshCw className="w-4 h-4" />
               <span>Refresh</span>
@@ -706,84 +710,84 @@ export default function AdminDashboard() {
 
         {/* Stats Cards */}
         {activeTab === 'appointments' && (
-          <div className="p-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
-              <div className="bg-dark-800/50 backdrop-blur-sm rounded-2xl border border-gold-600/20 p-4">
+          <div className="p-4 sm:p-6 lg:p-8">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-6 sm:mb-8">
+              <div className="bg-dark-800/50 backdrop-blur-sm rounded-2xl border border-gold-600/20 p-3 sm:p-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-gray-400 text-xs">Total</p>
-                    <p className="text-2xl font-bold text-white">{stats.totalAppointments}</p>
+                    <p className="text-xl sm:text-2xl font-bold text-white">{stats.totalAppointments}</p>
                   </div>
-                  <CalendarDays className="w-8 h-8 text-gold-400 opacity-50" />
+                  <CalendarDays className="w-6 h-6 sm:w-8 sm:h-8 text-gold-400 opacity-50" />
                 </div>
               </div>
               
-              <div className="bg-dark-800/50 backdrop-blur-sm rounded-2xl border border-gold-600/20 p-4">
+              <div className="bg-dark-800/50 backdrop-blur-sm rounded-2xl border border-gold-600/20 p-3 sm:p-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-gray-400 text-xs">Revenue</p>
-                    <p className="text-2xl font-bold text-gold-400">Rs.{stats.totalRevenue.toLocaleString()}</p>
+                    <p className="text-lg sm:text-2xl font-bold text-gold-400">Rs.{stats.totalRevenue.toLocaleString()}</p>
                   </div>
-                  <DollarSign className="w-8 h-8 text-green-400 opacity-50" />
+                  <DollarSign className="w-6 h-6 sm:w-8 sm:h-8 text-green-400 opacity-50" />
                 </div>
               </div>
               
-              <div className="bg-dark-800/50 backdrop-blur-sm rounded-2xl border border-gold-600/20 p-4">
+              <div className="bg-dark-800/50 backdrop-blur-sm rounded-2xl border border-gold-600/20 p-3 sm:p-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-gray-400 text-xs">Confirmed</p>
-                    <p className="text-2xl font-bold text-green-400">{stats.confirmedAppointments}</p>
+                    <p className="text-xl sm:text-2xl font-bold text-green-400">{stats.confirmedAppointments}</p>
                   </div>
-                  <CheckCircle className="w-8 h-8 text-green-400 opacity-50" />
+                  <CheckCircle className="w-6 h-6 sm:w-8 sm:h-8 text-green-400 opacity-50" />
                 </div>
               </div>
               
-              <div className="bg-dark-800/50 backdrop-blur-sm rounded-2xl border border-gold-600/20 p-4">
+              <div className="bg-dark-800/50 backdrop-blur-sm rounded-2xl border border-gold-600/20 p-3 sm:p-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-gray-400 text-xs">Completed</p>
-                    <p className="text-2xl font-bold text-blue-400">{stats.completedAppointments}</p>
+                    <p className="text-xl sm:text-2xl font-bold text-blue-400">{stats.completedAppointments}</p>
                   </div>
-                  <Star className="w-8 h-8 text-blue-400 opacity-50" />
+                  <Star className="w-6 h-6 sm:w-8 sm:h-8 text-blue-400 opacity-50" />
                 </div>
               </div>
               
-              <div className="bg-dark-800/50 backdrop-blur-sm rounded-2xl border border-gold-600/20 p-4">
+              <div className="bg-dark-800/50 backdrop-blur-sm rounded-2xl border border-gold-600/20 p-3 sm:p-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-gray-400 text-xs">Upcoming</p>
-                    <p className="text-2xl font-bold text-purple-400">{stats.upcomingAppointments}</p>
+                    <p className="text-xl sm:text-2xl font-bold text-purple-400">{stats.upcomingAppointments}</p>
                   </div>
-                  <TrendingUp className="w-8 h-8 text-purple-400 opacity-50" />
+                  <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 text-purple-400 opacity-50" />
                 </div>
               </div>
               
-              <div className="bg-dark-800/50 backdrop-blur-sm rounded-2xl border border-gold-600/20 p-4">
+              <div className="bg-dark-800/50 backdrop-blur-sm rounded-2xl border border-gold-600/20 p-3 sm:p-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-gray-400 text-xs">Cancelled</p>
-                    <p className="text-2xl font-bold text-red-400">{stats.cancelledAppointments}</p>
+                    <p className="text-xl sm:text-2xl font-bold text-red-400">{stats.cancelledAppointments}</p>
                   </div>
-                  <XCircle className="w-8 h-8 text-red-400 opacity-50" />
+                  <XCircle className="w-6 h-6 sm:w-8 sm:h-8 text-red-400 opacity-50" />
                 </div>
               </div>
             </div>
 
             {/* Filters */}
-            <div className="bg-dark-800/50 backdrop-blur-sm rounded-2xl border border-gold-600/20 p-6 mb-8">
-              <div className="flex flex-wrap gap-4">
-                <div className="flex-1 min-w-[200px]">
+            <div className="bg-dark-800/50 backdrop-blur-sm rounded-2xl border border-gold-600/20 p-4 sm:p-6 mb-6 sm:mb-8">
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                <div className="flex-1 min-w-[0]">
                   <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
                     <input
                       type="text"
-                      placeholder="Search by name, email, phone, or booking ID..."
+                      placeholder="Search by name, email, phone..."
                       value={searchTerm}
                       onChange={(e) => {
                         setSearchTerm(e.target.value);
                         filterAppointments(appointments, e.target.value, statusFilter, dateFilter);
                       }}
-                      className="w-full bg-dark-700 border border-gold-600/30 rounded-xl py-3 pl-11 pr-4 text-white placeholder-gray-500 focus:outline-none focus:border-gold-500 transition-all"
+                      className="w-full bg-dark-700 border border-gold-600/30 rounded-xl py-2.5 sm:py-3 pl-9 sm:pl-11 pr-3 sm:pr-4 text-white placeholder-gray-500 text-sm sm:text-base focus:outline-none focus:border-gold-500 transition-all"
                     />
                   </div>
                 </div>
@@ -794,7 +798,7 @@ export default function AdminDashboard() {
                     setStatusFilter(e.target.value);
                     filterAppointments(appointments, searchTerm, e.target.value, dateFilter);
                   }}
-                  className="bg-dark-700 border border-gold-600/30 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-gold-500 transition-all"
+                  className="bg-dark-700 border border-gold-600/30 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-white text-sm sm:text-base focus:outline-none focus:border-gold-500 transition-all"
                 >
                   <option value="all">All Status</option>
                   <option value="confirmed">Confirmed</option>
@@ -809,7 +813,7 @@ export default function AdminDashboard() {
                     setDateFilter(e.target.value);
                     filterAppointments(appointments, searchTerm, statusFilter, e.target.value);
                   }}
-                  className="bg-dark-700 border border-gold-600/30 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-gold-500 transition-all"
+                  className="bg-dark-700 border border-gold-600/30 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-white text-sm sm:text-base focus:outline-none focus:border-gold-500 transition-all"
                 />
                 
                 {(searchTerm || statusFilter !== 'all' || dateFilter) && (
@@ -820,268 +824,233 @@ export default function AdminDashboard() {
                       setDateFilter('');
                       setFilteredAppointments(appointments);
                     }}
-                    className="px-6 py-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 hover:bg-red-500/20 transition-all"
+                    className="px-4 sm:px-6 py-2.5 sm:py-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm sm:text-base hover:bg-red-500/20 transition-all"
                   >
-                    Clear Filters
+                    Clear
                   </button>
                 )}
               </div>
             </div>
 
-            {/* Appointments Table */}
-            <div className="bg-dark-800/50 backdrop-blur-sm rounded-2xl border border-gold-600/20 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-dark-700 border-b border-gold-600/30">
-                    <tr>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gold-400 w-10"></th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gold-400">Client</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gold-400">Date & Time</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gold-400">Countdown</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gold-400">Services</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gold-400">Stylist</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gold-400">Total</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gold-400">Status</th>
-                      <th className="px-6 py-4 text-left text-sm font-semibold text-gold-400">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loading ? (
-                      <tr key="loading-state">
-                        <td colSpan={9} className="px-6 py-20 text-center">
-                          <div className="flex flex-col items-center justify-center">
-                            <div className="w-12 h-12 border-4 border-gold-500/30 border-t-gold-500 rounded-full animate-spin mb-4"></div>
-                            <p className="text-gray-400">Loading appointments...</p>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : filteredAppointments.length === 0 ? (
-                      <tr key="empty-state">
-                        <td colSpan={9} className="px-6 py-20 text-center">
-                          <div className="flex flex-col items-center justify-center">
-                            <Calendar className="w-16 h-16 text-gray-600 mb-4" />
-                            <p className="text-gray-400 text-lg">No appointments found</p>
-                            <p className="text-gray-500 text-sm mt-1">Try adjusting your filters</p>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredAppointments.map((appointment, index) => (
-                        <React.Fragment key={appointment._id || `apt-${index}`}>
-                          <tr className="border-b border-gold-600/10 hover:bg-gold-500/5 transition-colors">
-                            <td className="px-6 py-4">
-                              <button
-                                onClick={() => toggleRowExpansion(appointment._id)}
-                                className="text-gray-400 hover:text-gold-400 transition-colors"
-                              >
-                                {expandedRows.has(appointment._id) ? 
-                                  <ChevronUp className="w-4 h-4" /> : 
-                                  <ChevronDown className="w-4 h-4" />
-                                }
-                              </button>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div>
-                                <p className="text-white font-medium">{appointment.name}</p>
-                                <p className="text-gray-400 text-xs">{appointment.email}</p>
-                                <p className="text-gray-400 text-xs">{appointment.phone}</p>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex items-center space-x-2">
-                                <Calendar className="w-4 h-4 text-gold-400" />
-                                <span className="text-white text-sm">{appointment.date}</span>
-                              </div>
-                              <div className="flex items-center space-x-2 mt-1">
-                                <Clock className="w-4 h-4 text-gray-400" />
-                                <span className="text-gray-400 text-xs">{appointment.time}</span>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              {appointment.status === 'confirmed' ? (
-                                getCountdownDisplay(appointment._id)
-                              ) : (
-                                <span className="text-gray-500 text-xs">-</span>
-                              )}
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="space-y-1">
-                                {appointment.services.slice(0, 2).map((service, idx) => (
-                                  <p key={`srvc-${idx}`} className="text-gray-300 text-sm">{service.name}</p>
-                                ))}
-                                {appointment.services.length > 2 && (
-                                  <p className="text-gold-400 text-xs">+{appointment.services.length - 2} more</p>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex items-center space-x-2">
-                                <User className="w-4 h-4 text-gold-400" />
-                                <span className="text-white text-sm">{appointment.stylist}</span>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className="text-gold-400 font-semibold">Rs.{appointment.totalPrice}</span>
-                            </td>
-                            <td className="px-6 py-4">
-                              {getStatusBadge(appointment.status)}
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex items-center space-x-2">
-                                <button
-                                  onClick={() => handleViewDetails(appointment)}
-                                  className="p-2 bg-blue-500/10 border border-blue-500/30 rounded-lg text-blue-400 hover:bg-blue-500/20 transition-all duration-300 flex items-center space-x-1"
-                                  title="View Details"
-                                >
-                                  <Eye className="w-4 h-4" />
-                                  <span className="text-xs hidden sm:inline">View</span>
-                                </button>
-                                
-                                <button
-                                  onClick={() => handleDownloadPDF(appointment)}
-                                  className="p-2 bg-green-500/10 border border-green-500/30 rounded-lg text-green-400 hover:bg-green-500/20 transition-all duration-300 flex items-center space-x-1"
-                                  title="Download PDF"
-                                >
-                                  <Download className="w-4 h-4" />
-                                  <span className="text-xs hidden sm:inline">PDF</span>
-                                </button>
-                                
-                                <div className="relative group">
-                                  <button 
-                                    disabled={updatingStatus === appointment._id}
-                                    className="p-2 bg-gold-500/10 border border-gold-500/30 rounded-lg text-gold-400 hover:bg-gold-500/20 transition-all duration-300 flex items-center space-x-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                                  >
-                                    {updatingStatus === appointment._id ? (
-                                      <div className="w-4 h-4 border-2 border-gold-400 border-t-transparent rounded-full animate-spin"></div>
-                                    ) : (
-                                      <MoreVertical className="w-4 h-4" />
-                                    )}
-                                    <span className="text-xs hidden sm:inline">
-                                      {updatingStatus === appointment._id ? 'Updating...' : 'Status'}
-                                    </span>
-                                  </button>
-                                  <div className="absolute right-0 mt-2 w-48 bg-dark-700 rounded-xl border border-gold-600/30 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10">
-                                    {getAvailableStatusOptions(appointment.status).map((statusOption, idx) => (
-                                      <button
-                                        key={statusOption.value}
-                                        onClick={() => requestStatusUpdate(appointment._id, statusOption.value as Appointment['status'], appointment.name, appointment.status)}
-                                        disabled={updatingStatus === appointment._id}
-                                        className={`w-full px-4 py-2.5 text-left text-sm transition-colors flex items-center space-x-3 ${
-                                          statusOption.value === 'confirmed' ? 'hover:bg-green-500/10' :
-                                          statusOption.value === 'completed' ? 'hover:bg-blue-500/10' :
-                                          'hover:bg-red-500/10'
-                                        } ${
-                                          idx === 0 ? 'rounded-t-xl' : ''
-                                        } ${
-                                          idx === getAvailableStatusOptions(appointment.status).length - 1 ? 'rounded-b-xl' : ''
-                                        } disabled:opacity-50`}
-                                      >
-                                        <div className={`${statusOption.color}`}>
-                                          {statusOption.icon}
-                                        </div>
-                                        <span className={`${statusOption.color}`}>
-                                          {statusOption.label}
-                                        </span>
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                          
-                          {expandedRows.has(appointment._id) && (
-                            <tr key={`expanded-${appointment._id}`} className="bg-dark-700/30">
-                              <td colSpan={9} className="px-6 py-4">
-                                <div className="bg-dark-800 rounded-xl p-4 border border-gold-600/20">
-                                  <h4 className="text-gold-400 font-semibold mb-3 flex items-center space-x-2">
-                                    <CreditCard className="w-4 h-4" />
-                                    <span>All Services ({appointment.services.length})</span>
-                                  </h4>
-                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                    {appointment.services.map((service, idx) => (
-                                      <div key={`exp-srvc-${idx}`} className="flex items-center justify-between p-2 bg-dark-700 rounded-lg">
-                                        <div>
-                                          <p className="text-white text-sm">{service.name}</p>
-                                          <p className="text-gray-400 text-xs">{service.category} • {service.duration} min</p>
-                                        </div>
-                                        <p className="text-gold-400 font-semibold text-sm">Rs.{service.price}</p>
-                                      </div>
-                                    ))}
-                                  </div>
-                                  {appointment.notes && (
-                                    <div className="mt-4 pt-3 border-t border-gold-600/20">
-                                      <p className="text-gray-400 text-sm flex items-center space-x-2">
-                                        <MessageSquare className="w-4 h-4" />
-                                        <span>Notes: {appointment.notes}</span>
-                                      </p>
-                                    </div>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      ))
+            {/* Appointments - Mobile Card View (Default) */}
+            <div className="space-y-4">
+              {loading ? (
+                <div className="bg-dark-800/50 backdrop-blur-sm rounded-2xl border border-gold-600/20 p-8 text-center">
+                  <div className="flex flex-col items-center justify-center">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 border-4 border-gold-500/30 border-t-gold-500 rounded-full animate-spin mb-4"></div>
+                    <p className="text-gray-400 text-sm sm:text-base">Loading appointments...</p>
+                  </div>
+                </div>
+              ) : filteredAppointments.length === 0 ? (
+                <div className="bg-dark-800/50 backdrop-blur-sm rounded-2xl border border-gold-600/20 p-8 text-center">
+                  <div className="flex flex-col items-center justify-center">
+                    <Calendar className="w-12 h-12 sm:w-16 sm:h-16 text-gray-600 mb-4" />
+                    <p className="text-gray-400 text-base sm:text-lg">No appointments found</p>
+                    <p className="text-gray-500 text-xs sm:text-sm mt-1">Try adjusting your filters</p>
+                  </div>
+                </div>
+              ) : (
+                filteredAppointments.map((appointment) => (
+                  <div key={appointment._id} className="bg-dark-800/50 backdrop-blur-sm rounded-2xl border border-gold-600/20 p-4 space-y-3">
+                    {/* Header with name and status */}
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-white font-semibold text-base">{appointment.name}</p>
+                          <button
+                            onClick={() => toggleRowExpansion(appointment._id)}
+                            className="text-gray-400 hover:text-gold-400 transition-colors"
+                          >
+                            {expandedRows.has(appointment._id) ? 
+                              <ChevronUp className="w-4 h-4" /> : 
+                              <ChevronDown className="w-4 h-4" />
+                            }
+                          </button>
+                        </div>
+                        <p className="text-gray-400 text-xs break-all">{appointment.email}</p>
+                        <p className="text-gray-400 text-xs">{appointment.phone}</p>
+                      </div>
+                      {getStatusBadge(appointment.status)}
+                    </div>
+                    
+                    {/* Date and Time */}
+                    <div className="flex items-center gap-4 text-sm">
+                      <div className="flex items-center gap-1">
+                        <Calendar className="w-4 h-4 text-gold-400" />
+                        <span className="text-gray-300">{appointment.date}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Clock className="w-4 h-4 text-gray-400" />
+                        <span className="text-gray-400 text-xs">{appointment.time}</span>
+                      </div>
+                    </div>
+                    
+                    {/* Countdown for confirmed */}
+                    {appointment.status === 'confirmed' && (
+                      <div className="flex items-center gap-2">
+                        <Timer className="w-4 h-4 text-gold-400" />
+                        {getCountdownDisplay(appointment._id)}
+                      </div>
                     )}
-                  </tbody>
-                </table>
-              </div>
+                    
+                    {/* Services preview */}
+                    <div className="flex flex-wrap gap-1">
+                      {appointment.services.slice(0, 2).map((service, idx) => (
+                        <span key={`mobile-srvc-${idx}`} className="text-gray-300 text-xs bg-dark-700 px-2 py-1 rounded-full">
+                          {service.name}
+                        </span>
+                      ))}
+                      {appointment.services.length > 2 && (
+                        <span className="text-gold-400 text-xs">+{appointment.services.length - 2} more</span>
+                      )}
+                    </div>
+                    
+                    {/* Stylist and Total */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <User className="w-4 h-4 text-gold-400" />
+                        <span className="text-white text-sm">{appointment.stylist}</span>
+                      </div>
+                      <span className="text-gold-400 font-semibold text-sm">Rs.{appointment.totalPrice}</span>
+                    </div>
+                    
+                    {/* Action Buttons */}
+                    <div className="flex items-center gap-3 pt-2">
+                      <button
+                        onClick={() => handleViewDetails(appointment)}
+                        className="flex-1 flex items-center justify-center gap-1 py-2 bg-blue-500/10 border border-blue-500/30 rounded-lg text-blue-400 text-sm"
+                      >
+                        <Eye className="w-4 h-4" />
+                        <span>View</span>
+                      </button>
+                      
+                      <button
+                        onClick={() => handleDownloadPDF(appointment)}
+                        className="flex-1 flex items-center justify-center gap-1 py-2 bg-green-500/10 border border-green-500/30 rounded-lg text-green-400 text-sm"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span>PDF</span>
+                      </button>
+                      
+                      <div className="relative group flex-1">
+                        <button 
+                          disabled={updatingStatus === appointment._id}
+                          className="w-full flex items-center justify-center gap-1 py-2 bg-gold-500/10 border border-gold-500/30 rounded-lg text-gold-400 text-sm disabled:opacity-50"
+                        >
+                          {updatingStatus === appointment._id ? (
+                            <div className="w-4 h-4 border-2 border-gold-400 border-t-transparent rounded-full animate-spin"></div>
+                          ) : (
+                            <>
+                              <MoreVertical className="w-4 h-4" />
+                              <span>Status</span>
+                            </>
+                          )}
+                        </button>
+                        <div className="absolute bottom-full left-0 mb-2 w-full bg-dark-700 rounded-xl border border-gold-600/30 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10">
+                          {getAvailableStatusOptions(appointment.status).map((statusOption) => (
+                            <button
+                              key={statusOption.value}
+                              onClick={() => requestStatusUpdate(appointment._id, statusOption.value as Appointment['status'], appointment.name, appointment.status)}
+                              className={`w-full px-4 py-2 text-sm transition-colors flex items-center justify-center gap-2 ${
+                                statusOption.value === 'confirmed' ? 'hover:bg-green-500/10 text-green-400' :
+                                statusOption.value === 'completed' ? 'hover:bg-blue-500/10 text-blue-400' :
+                                'hover:bg-red-500/10 text-red-400'
+                              }`}
+                            >
+                              {statusOption.icon}
+                              <span>{statusOption.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Expanded Services Section */}
+                    {expandedRows.has(appointment._id) && (
+                      <div className="mt-3 pt-3 border-t border-gold-600/20">
+                        <h4 className="text-gold-400 font-semibold mb-2 text-sm flex items-center gap-2">
+                          <CreditCard className="w-4 h-4" />
+                          <span>All Services ({appointment.services.length})</span>
+                        </h4>
+                        <div className="space-y-2">
+                          {appointment.services.map((service, idx) => (
+                            <div key={`exp-srvc-${idx}`} className="flex items-center justify-between p-2 bg-dark-700 rounded-lg">
+                              <div>
+                                <p className="text-white text-sm">{service.name}</p>
+                                <p className="text-gray-400 text-xs">{service.category} • {service.duration} min</p>
+                              </div>
+                              <p className="text-gold-400 font-semibold text-sm">Rs.{service.price}</p>
+                            </div>
+                          ))}
+                        </div>
+                        {appointment.notes && (
+                          <div className="mt-3 pt-2 border-t border-gold-600/20">
+                            <p className="text-gray-400 text-xs flex items-center gap-2">
+                              <MessageSquare className="w-3 h-3" />
+                              <span>Notes: {appointment.notes}</span>
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
             </div>
           </div>
         )}
 
         {/* Analytics Tab */}
         {activeTab === 'analytics' && (
-          <div className="p-8">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div className="bg-dark-800/50 backdrop-blur-sm rounded-2xl border border-gold-600/20 p-8">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-bold gold-text-gradient">Revenue Analytics</h2>
-                  <BarChart3 className="w-6 h-6 text-gold-400" />
+          <div className="p-4 sm:p-6 lg:p-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8">
+              <div className="bg-dark-800/50 backdrop-blur-sm rounded-2xl border border-gold-600/20 p-4 sm:p-6 lg:p-8">
+                <div className="flex items-center justify-between mb-4 sm:mb-6">
+                  <h2 className="text-xl sm:text-2xl font-bold gold-text-gradient">Revenue Analytics</h2>
+                  <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6 text-gold-400" />
                 </div>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center p-4 bg-dark-700/30 rounded-xl">
-                    <span className="text-gray-300">Total Revenue</span>
-                    <span className="text-2xl font-bold text-gold-400">Rs.{stats.totalRevenue.toLocaleString()}</span>
+                <div className="space-y-3 sm:space-y-4">
+                  <div className="flex justify-between items-center p-3 sm:p-4 bg-dark-700/30 rounded-xl">
+                    <span className="text-gray-300 text-sm sm:text-base">Total Revenue</span>
+                    <span className="text-lg sm:text-2xl font-bold text-gold-400">Rs.{stats.totalRevenue.toLocaleString()}</span>
                   </div>
-                  <div className="flex justify-between items-center p-4 bg-dark-700/30 rounded-xl">
-                    <span className="text-gray-300">Average per Appointment</span>
-                    <span className="text-xl font-semibold text-white">
+                  <div className="flex justify-between items-center p-3 sm:p-4 bg-dark-700/30 rounded-xl">
+                    <span className="text-gray-300 text-sm sm:text-base">Average per Appointment</span>
+                    <span className="text-base sm:text-xl font-semibold text-white">
                       Rs.{stats.totalAppointments > 0 ? Math.round(stats.totalRevenue / stats.totalAppointments).toLocaleString() : 0}
                     </span>
                   </div>
-                  <div className="flex justify-between items-center p-4 bg-dark-700/30 rounded-xl">
-                    <span className="text-gray-300">Total Appointments</span>
-                    <span className="text-xl font-semibold text-white">{stats.totalAppointments}</span>
+                  <div className="flex justify-between items-center p-3 sm:p-4 bg-dark-700/30 rounded-xl">
+                    <span className="text-gray-300 text-sm sm:text-base">Total Appointments</span>
+                    <span className="text-base sm:text-xl font-semibold text-white">{stats.totalAppointments}</span>
                   </div>
                 </div>
               </div>
               
-              <div className="bg-dark-800/50 backdrop-blur-sm rounded-2xl border border-gold-600/20 p-8">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-bold gold-text-gradient">Status Distribution</h2>
+              <div className="bg-dark-800/50 backdrop-blur-sm rounded-2xl border border-gold-600/20 p-4 sm:p-6 lg:p-8">
+                <div className="flex items-center justify-between mb-4 sm:mb-6">
+                  <h2 className="text-xl sm:text-2xl font-bold gold-text-gradient">Status Distribution</h2>
                 </div>
-                <div className="h-64 flex items-center justify-center border border-gold-600/20 rounded-xl bg-dark-700/30">
+                <div className="h-48 sm:h-56 lg:h-64 flex items-center justify-center border border-gold-600/20 rounded-xl bg-dark-700/30">
                   <div className="text-center">
-                    <div className="flex justify-center space-x-8 mb-4">
+                    <div className="flex flex-wrap justify-center gap-4 sm:gap-6 lg:gap-8 mb-3 sm:mb-4">
                       <div className="text-center">
-                        <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-2">
-                          <span className="text-2xl font-bold text-green-400">{stats.confirmedAppointments}</span>
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-1 sm:mb-2">
+                          <span className="text-base sm:text-xl lg:text-2xl font-bold text-green-400">{stats.confirmedAppointments}</span>
                         </div>
-                        <p className="text-gray-400 text-sm">Confirmed</p>
+                        <p className="text-gray-400 text-xs sm:text-sm">Confirmed</p>
                       </div>
                       <div className="text-center">
-                        <div className="w-16 h-16 rounded-full bg-blue-500/20 flex items-center justify-center mx-auto mb-2">
-                          <span className="text-2xl font-bold text-blue-400">{stats.completedAppointments}</span>
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16 rounded-full bg-blue-500/20 flex items-center justify-center mx-auto mb-1 sm:mb-2">
+                          <span className="text-base sm:text-xl lg:text-2xl font-bold text-blue-400">{stats.completedAppointments}</span>
                         </div>
-                        <p className="text-gray-400 text-sm">Completed</p>
+                        <p className="text-gray-400 text-xs sm:text-sm">Completed</p>
                       </div>
                       <div className="text-center">
-                        <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-2">
-                          <span className="text-2xl font-bold text-red-400">{stats.cancelledAppointments}</span>
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-1 sm:mb-2">
+                          <span className="text-base sm:text-xl lg:text-2xl font-bold text-red-400">{stats.cancelledAppointments}</span>
                         </div>
-                        <p className="text-gray-400 text-sm">Cancelled</p>
+                        <p className="text-gray-400 text-xs sm:text-sm">Cancelled</p>
                       </div>
                     </div>
                   </div>
@@ -1093,11 +1062,11 @@ export default function AdminDashboard() {
 
         {/* Clients Tab */}
         {activeTab === 'clients' && (
-          <div className="p-8">
+          <div className="p-4 sm:p-6 lg:p-8">
             <div className="bg-dark-800/50 backdrop-blur-sm rounded-2xl border border-gold-600/20 overflow-hidden">
-              <div className="p-6 border-b border-gold-600/30">
-                <h2 className="text-2xl font-bold gold-text-gradient">Client Directory</h2>
-                <p className="text-gray-400 text-sm mt-1">
+              <div className="p-4 sm:p-6 border-b border-gold-600/30">
+                <h2 className="text-xl sm:text-2xl font-bold gold-text-gradient">Client Directory</h2>
+                <p className="text-gray-400 text-xs sm:text-sm mt-1">
                   {new Set(appointments.map(a => a.email)).size} unique clients • {appointments.length} total appointments
                 </p>
               </div>
@@ -1108,31 +1077,31 @@ export default function AdminDashboard() {
                   const lastVisit = clientAppointments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
                   
                   return (
-                    <div key={client.email || `client-${index}`} className="p-6 hover:bg-gold-500/5 transition-colors">
-                      <div className="flex items-center justify-between flex-wrap gap-4">
-                        <div className="flex items-center space-x-4">
-                          <div className="w-12 h-12 bg-gold-500/10 rounded-full flex items-center justify-center">
-                            <User className="w-6 h-6 text-gold-400" />
+                    <div key={client.email || `client-${index}`} className="p-4 sm:p-6 hover:bg-gold-500/5 transition-colors">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+                        <div className="flex items-center space-x-3 sm:space-x-4">
+                          <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gold-500/10 rounded-full flex items-center justify-center flex-shrink-0">
+                            <User className="w-5 h-5 sm:w-6 sm:h-6 text-gold-400" />
                           </div>
                           <div>
-                            <p className="text-white font-semibold text-lg">{client.name}</p>
-                            <div className="flex flex-wrap items-center gap-3 mt-1">
+                            <p className="text-white font-semibold text-base sm:text-lg">{client.name}</p>
+                            <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1">
                               <div className="flex items-center space-x-1">
                                 <Mail className="w-3 h-3 text-gray-400" />
-                                <span className="text-gray-400 text-sm">{client.email}</span>
+                                <span className="text-gray-400 text-xs sm:text-sm break-all">{client.email}</span>
                               </div>
                               <div className="flex items-center space-x-1">
                                 <Phone className="w-3 h-3 text-gray-400" />
-                                <span className="text-gray-400 text-sm">{client.phone}</span>
+                                <span className="text-gray-400 text-xs sm:text-sm">{client.phone}</span>
                               </div>
                             </div>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-gold-400 font-semibold">
+                        <div className="text-left sm:text-right">
+                          <p className="text-gold-400 font-semibold text-sm sm:text-base">
                             {clientAppointments.length} appointment{clientAppointments.length !== 1 ? 's' : ''}
                           </p>
-                          <p className="text-gray-400 text-sm">
+                          <p className="text-gray-400 text-xs sm:text-sm">
                             Total: Rs.{totalSpent.toLocaleString()}
                           </p>
                           {lastVisit && (
@@ -1152,37 +1121,37 @@ export default function AdminDashboard() {
 
         {/* Settings Tab */}
         {activeTab === 'settings' && (
-          <div className="p-8">
-            <div className="bg-dark-800/50 backdrop-blur-sm rounded-2xl border border-gold-600/20 p-8">
-              <h2 className="text-2xl font-bold gold-text-gradient mb-6">Administrator Settings</h2>
-              <div className="space-y-4">
-                <div className="p-4 bg-dark-700/30 rounded-xl border border-gold-600/20 hover:border-gold-500/50 transition-all cursor-pointer">
-                  <h3 className="text-lg font-semibold text-white mb-2 flex items-center space-x-2">
-                    <Mail className="w-5 h-5 text-gold-400" />
+          <div className="p-4 sm:p-6 lg:p-8">
+            <div className="bg-dark-800/50 backdrop-blur-sm rounded-2xl border border-gold-600/20 p-4 sm:p-6 lg:p-8">
+              <h2 className="text-xl sm:text-2xl font-bold gold-text-gradient mb-4 sm:mb-6">Administrator Settings</h2>
+              <div className="space-y-3 sm:space-y-4">
+                <div className="p-3 sm:p-4 bg-dark-700/30 rounded-xl border border-gold-600/20 hover:border-gold-500/50 transition-all cursor-pointer">
+                  <h3 className="text-base sm:text-lg font-semibold text-white mb-1 sm:mb-2 flex items-center space-x-2">
+                    <Mail className="w-4 h-4 sm:w-5 sm:h-5 text-gold-400" />
                     <span>Email Notifications</span>
                   </h3>
-                  <p className="text-gray-400 text-sm">Configure email notification settings for appointment updates and reminders</p>
+                  <p className="text-gray-400 text-xs sm:text-sm">Configure email notification settings for appointment updates and reminders</p>
                 </div>
-                <div className="p-4 bg-dark-700/30 rounded-xl border border-gold-600/20 hover:border-gold-500/50 transition-all cursor-pointer">
-                  <h3 className="text-lg font-semibold text-white mb-2 flex items-center space-x-2">
-                    <Clock className="w-5 h-5 text-gold-400" />
+                <div className="p-3 sm:p-4 bg-dark-700/30 rounded-xl border border-gold-600/20 hover:border-gold-500/50 transition-all cursor-pointer">
+                  <h3 className="text-base sm:text-lg font-semibold text-white mb-1 sm:mb-2 flex items-center space-x-2">
+                    <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-gold-400" />
                     <span>Business Hours</span>
                   </h3>
-                  <p className="text-gray-400 text-sm">Set salon operating hours, break times, and holiday schedules</p>
+                  <p className="text-gray-400 text-xs sm:text-sm">Set salon operating hours, break times, and holiday schedules</p>
                 </div>
-                <div className="p-4 bg-dark-700/30 rounded-xl border border-gold-600/20 hover:border-gold-500/50 transition-all cursor-pointer">
-                  <h3 className="text-lg font-semibold text-white mb-2 flex items-center space-x-2">
-                    <Scissors className="w-5 h-5 text-gold-400" />
+                <div className="p-3 sm:p-4 bg-dark-700/30 rounded-xl border border-gold-600/20 hover:border-gold-500/50 transition-all cursor-pointer">
+                  <h3 className="text-base sm:text-lg font-semibold text-white mb-1 sm:mb-2 flex items-center space-x-2">
+                    <Scissors className="w-4 h-4 sm:w-5 sm:h-5 text-gold-400" />
                     <span>Service Management</span>
                   </h3>
-                  <p className="text-gray-400 text-sm">Add, edit, or remove services, pricing, and duration times</p>
+                  <p className="text-gray-400 text-xs sm:text-sm">Add, edit, or remove services, pricing, and duration times</p>
                 </div>
-                <div className="p-4 bg-dark-700/30 rounded-xl border border-gold-600/20 hover:border-gold-500/50 transition-all cursor-pointer">
-                  <h3 className="text-lg font-semibold text-white mb-2 flex items-center space-x-2">
-                    <Users className="w-5 h-5 text-gold-400" />
+                <div className="p-3 sm:p-4 bg-dark-700/30 rounded-xl border border-gold-600/20 hover:border-gold-500/50 transition-all cursor-pointer">
+                  <h3 className="text-base sm:text-lg font-semibold text-white mb-1 sm:mb-2 flex items-center space-x-2">
+                    <Users className="w-4 h-4 sm:w-5 sm:h-5 text-gold-400" />
                     <span>Stylist Management</span>
                   </h3>
-                  <p className="text-gray-400 text-sm">Manage stylist profiles, schedules, and specializations</p>
+                  <p className="text-gray-400 text-xs sm:text-sm">Manage stylist profiles, schedules, and specializations</p>
                 </div>
               </div>
             </div>
@@ -1192,41 +1161,41 @@ export default function AdminDashboard() {
 
       {/* Appointment Details Modal */}
       {showDetailsModal && selectedAppointment && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 bg-dark-900/90 backdrop-blur-sm">
-          <div className="bg-dark-800 rounded-2xl border border-gold-600/30 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-dark-800 border-b border-gold-600/30 p-6 flex items-center justify-between">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-3 sm:px-4 bg-dark-900/90 backdrop-blur-sm overflow-y-auto py-4">
+          <div className="bg-dark-800 rounded-2xl border border-gold-600/30 max-w-4xl w-full my-auto">
+            <div className="sticky top-0 bg-dark-800 border-b border-gold-600/30 p-4 sm:p-6 flex flex-wrap items-center justify-between gap-3 rounded-t-2xl">
               <div>
-                <h3 className="text-2xl font-bold gold-text-gradient">Appointment Details</h3>
-                <p className="text-gray-400 text-sm mt-1">Booking ID: {selectedAppointment._id ? selectedAppointment._id.slice(-8).toUpperCase() : 'N/A'}</p>
+                <h3 className="text-xl sm:text-2xl font-bold gold-text-gradient">Appointment Details</h3>
+                <p className="text-gray-400 text-xs sm:text-sm mt-1">Booking ID: {selectedAppointment._id ? selectedAppointment._id.slice(-8).toUpperCase() : 'N/A'}</p>
               </div>
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-2 sm:space-x-3">
                 <button
                   onClick={() => handleDownloadPDF(selectedAppointment)}
-                  className="flex items-center space-x-2 px-4 py-2 bg-green-500/10 border border-green-500/30 rounded-xl text-green-400 hover:bg-green-500/20 transition-all"
+                  className="flex items-center space-x-1 sm:space-x-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-green-500/10 border border-green-500/30 rounded-xl text-green-400 hover:bg-green-500/20 transition-all text-sm sm:text-base"
                 >
-                  <Printer className="w-4 h-4" />
+                  <Printer className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   <span>Print</span>
                 </button>
                 <button
                   onClick={() => setShowDetailsModal(false)}
                   className="text-gray-400 hover:text-white transition-colors"
                 >
-                  <X className="w-6 h-6" />
+                  <X className="w-5 h-5 sm:w-6 sm:h-6" />
                 </button>
               </div>
             </div>
             
-            <div className="p-6 space-y-6">
-              <div className="flex items-center justify-between p-4 bg-dark-700/50 rounded-xl">
+            <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-h-[70vh] overflow-y-auto">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 sm:p-4 bg-dark-700/50 rounded-xl">
                 <div className="flex items-center space-x-3">
-                  <div className={`w-3 h-3 rounded-full ${
+                  <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full ${
                     selectedAppointment.status === 'confirmed' ? 'bg-green-400 animate-pulse' :
                     selectedAppointment.status === 'completed' ? 'bg-blue-400' : 'bg-red-400'
                   }`}></div>
-                  <span className="text-white font-medium">Current Status:</span>
+                  <span className="text-white text-sm sm:text-base font-medium">Current Status:</span>
                   {getStatusBadge(selectedAppointment.status)}
                 </div>
-                <div className="flex space-x-2">
+                <div className="flex flex-wrap gap-2">
                   {getAvailableStatusOptions(selectedAppointment.status).map((statusOption) => (
                     <button
                       key={statusOption.value}
@@ -1235,7 +1204,7 @@ export default function AdminDashboard() {
                         setShowDetailsModal(false);
                       }}
                       disabled={updatingStatus === selectedAppointment._id}
-                      className={`px-4 py-2 rounded-lg text-sm transition-colors flex items-center space-x-2 ${
+                      className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm transition-colors flex items-center space-x-1 sm:space-x-2 ${
                         statusOption.value === 'confirmed' ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' :
                         statusOption.value === 'completed' ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30' :
                         'bg-red-500/20 text-red-400 hover:bg-red-500/30'
@@ -1248,54 +1217,54 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="border border-gold-600/20 rounded-xl p-4">
-                  <h4 className="text-lg font-semibold text-gold-400 mb-4 flex items-center space-x-2">
-                    <User className="w-5 h-5" />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+                <div className="border border-gold-600/20 rounded-xl p-3 sm:p-4">
+                  <h4 className="text-base sm:text-lg font-semibold text-gold-400 mb-3 sm:mb-4 flex items-center space-x-2">
+                    <User className="w-4 h-4 sm:w-5 sm:h-5" />
                     <span>Client Information</span>
                   </h4>
-                  <div className="space-y-3">
+                  <div className="space-y-2 sm:space-y-3">
                     <div>
-                      <p className="text-gray-400 text-sm">Full Name</p>
-                      <p className="text-white font-medium">{selectedAppointment.name}</p>
+                      <p className="text-gray-400 text-xs sm:text-sm">Full Name</p>
+                      <p className="text-white font-medium text-sm sm:text-base">{selectedAppointment.name}</p>
                     </div>
                     <div>
-                      <p className="text-gray-400 text-sm">Email Address</p>
-                      <p className="text-white font-medium">{selectedAppointment.email}</p>
+                      <p className="text-gray-400 text-xs sm:text-sm">Email Address</p>
+                      <p className="text-white font-medium text-sm sm:text-base break-words">{selectedAppointment.email}</p>
                     </div>
                     <div>
-                      <p className="text-gray-400 text-sm">Phone Number</p>
-                      <p className="text-white font-medium">{selectedAppointment.phone}</p>
+                      <p className="text-gray-400 text-xs sm:text-sm">Phone Number</p>
+                      <p className="text-white font-medium text-sm sm:text-base">{selectedAppointment.phone}</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="border border-gold-600/20 rounded-xl p-4">
-                  <h4 className="text-lg font-semibold text-gold-400 mb-4 flex items-center space-x-2">
-                    <Calendar className="w-5 h-5" />
+                <div className="border border-gold-600/20 rounded-xl p-3 sm:p-4">
+                  <h4 className="text-base sm:text-lg font-semibold text-gold-400 mb-3 sm:mb-4 flex items-center space-x-2">
+                    <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
                     <span>Appointment Details</span>
                   </h4>
-                  <div className="space-y-3">
+                  <div className="space-y-2 sm:space-y-3">
                     <div>
-                      <p className="text-gray-400 text-sm">Date</p>
-                      <p className="text-white font-medium">{selectedAppointment.date}</p>
+                      <p className="text-gray-400 text-xs sm:text-sm">Date</p>
+                      <p className="text-white font-medium text-sm sm:text-base">{selectedAppointment.date}</p>
                     </div>
                     <div>
-                      <p className="text-gray-400 text-sm">Time Slot</p>
-                      <p className="text-white font-medium">{selectedAppointment.time} - {selectedAppointment.finishingTime}</p>
+                      <p className="text-gray-400 text-xs sm:text-sm">Time Slot</p>
+                      <p className="text-white font-medium text-sm sm:text-base">{selectedAppointment.time} - {selectedAppointment.finishingTime}</p>
                     </div>
                     <div>
-                      <p className="text-gray-400 text-sm">Stylist</p>
-                      <p className="text-white font-medium">{selectedAppointment.stylist}</p>
+                      <p className="text-gray-400 text-xs sm:text-sm">Stylist</p>
+                      <p className="text-white font-medium text-sm sm:text-base">{selectedAppointment.stylist}</p>
                     </div>
                     <div>
-                      <p className="text-gray-400 text-sm">Total Duration</p>
-                      <p className="text-white font-medium">{selectedAppointment.totalDuration} minutes</p>
+                      <p className="text-gray-400 text-xs sm:text-sm">Total Duration</p>
+                      <p className="text-white font-medium text-sm sm:text-base">{selectedAppointment.totalDuration} minutes</p>
                     </div>
                     {selectedAppointment.status === 'confirmed' && (
                       <div>
-                        <p className="text-gray-400 text-sm">Time Remaining</p>
-                        <div className="text-gold-400 font-mono">
+                        <p className="text-gray-400 text-xs sm:text-sm">Time Remaining</p>
+                        <div className="text-gold-400 font-mono text-sm">
                           {getCountdownDisplay(selectedAppointment._id)}
                         </div>
                       </div>
@@ -1304,47 +1273,47 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              <div className="border border-gold-600/20 rounded-xl p-4">
-                <h4 className="text-lg font-semibold text-gold-400 mb-4 flex items-center space-x-2">
-                  <CreditCard className="w-5 h-5" />
+              <div className="border border-gold-600/20 rounded-xl p-3 sm:p-4">
+                <h4 className="text-base sm:text-lg font-semibold text-gold-400 mb-3 sm:mb-4 flex items-center space-x-2">
+                  <CreditCard className="w-4 h-4 sm:w-5 sm:h-5" />
                   <span>Services Booked ({selectedAppointment.services.length})</span>
                 </h4>
                 <div className="space-y-2">
                   {selectedAppointment.services.map((service, idx) => (
-                    <div key={`modal-srvc-${idx}`} className="flex items-center justify-between py-2 border-b border-gold-600/10 last:border-0">
+                    <div key={`modal-srvc-${idx}`} className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-2 border-b border-gold-600/10 last:border-0 gap-1 sm:gap-0">
                       <div>
-                        <p className="text-white">{service.name}</p>
+                        <p className="text-white text-sm sm:text-base">{service.name}</p>
                         <p className="text-gray-400 text-xs">{service.category} • {service.duration} min</p>
                       </div>
-                      <p className="text-gold-400 font-semibold">Rs.{service.price}</p>
+                      <p className="text-gold-400 font-semibold text-sm sm:text-base">Rs.{service.price}</p>
                     </div>
                   ))}
-                  <div className="flex items-center justify-between pt-3 mt-2 border-t border-gold-600/30">
-                    <span className="text-gray-400">Services Total</span>
-                    <span className="text-white">Rs.{selectedAppointment.servicesTotal}</span>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pt-3 mt-2 border-t border-gold-600/30 gap-1 sm:gap-0">
+                    <span className="text-gray-400 text-sm">Services Total</span>
+                    <span className="text-white text-sm sm:text-base">Rs.{selectedAppointment.servicesTotal}</span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-400">Appointment Fee</span>
-                    <span className="text-white">Rs.{selectedAppointment.appointmentFee}</span>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0">
+                    <span className="text-gray-400 text-sm">Appointment Fee</span>
+                    <span className="text-white text-sm sm:text-base">Rs.{selectedAppointment.appointmentFee}</span>
                   </div>
-                  <div className="flex items-center justify-between pt-2">
-                    <span className="text-gold-400 font-bold text-lg">Total Amount</span>
-                    <span className="text-gold-400 font-bold text-2xl">Rs.{selectedAppointment.totalPrice}</span>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pt-2 gap-1 sm:gap-0">
+                    <span className="text-gold-400 font-bold text-base sm:text-lg">Total Amount</span>
+                    <span className="text-gold-400 font-bold text-xl sm:text-2xl">Rs.{selectedAppointment.totalPrice}</span>
                   </div>
                 </div>
               </div>
 
               {selectedAppointment.notes && (
-                <div className="border border-gold-600/20 rounded-xl p-4">
-                  <h4 className="text-lg font-semibold text-gold-400 mb-3 flex items-center space-x-2">
-                    <MessageSquare className="w-5 h-5" />
+                <div className="border border-gold-600/20 rounded-xl p-3 sm:p-4">
+                  <h4 className="text-base sm:text-lg font-semibold text-gold-400 mb-2 sm:mb-3 flex items-center space-x-2">
+                    <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5" />
                     <span>Special Notes</span>
                   </h4>
-                  <p className="text-gray-300 bg-dark-700/30 p-3 rounded-lg">{selectedAppointment.notes}</p>
+                  <p className="text-gray-300 bg-dark-700/30 p-2 sm:p-3 rounded-lg text-sm sm:text-base break-words">{selectedAppointment.notes}</p>
                 </div>
               )}
 
-              <div className="text-center pt-4 border-t border-gold-600/20">
+              <div className="text-center pt-3 sm:pt-4 border-t border-gold-600/20">
                 <p className="text-gray-500 text-xs">
                   Created on {new Date(selectedAppointment.createdAt).toLocaleString()}
                 </p>

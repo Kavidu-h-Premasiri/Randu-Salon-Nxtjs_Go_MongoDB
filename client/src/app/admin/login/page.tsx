@@ -29,7 +29,7 @@ export default function AdminLogin() {
 
     // Simulate API call - Replace with actual admin authentication
     setTimeout(() => {
-      if (email === 'admin@randusalon.com' && password === 'admin123') {
+      if (email === 'randusalon@gmail.com' && password === 'admin123') {
         // Store admin session
         localStorage.setItem('adminAuthenticated', 'true');
         router.push('/admin/dashboard');
@@ -122,7 +122,7 @@ export default function AdminLogin() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className="w-full px-4 py-3 bg-dark-700/50 border border-gold-500/30 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-gold-500 focus:ring-2 focus:ring-gold-500/20 transition-all duration-300"
-                      placeholder="admin@randusalon.com"
+                      placeholder="Enter your email"
                       required
                     />
                     <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-gold-500/0 via-gold-500/0 to-gold-500/0 group-hover/input:via-gold-500/5 transition-all duration-500 pointer-events-none"></div>
@@ -188,7 +188,7 @@ export default function AdminLogin() {
                 <div className="text-center pt-4 border-t border-gold-500/20">
                   <p className="text-xs text-gray-500 mb-2">Demo Credentials</p>
                   <div className="flex justify-center gap-4 text-xs">
-                    <span className="text-gold-400">admin@randusalon.com</span>
+                    <span className="text-gold-400">randusalon@gmail.com</span>
                     <span className="text-gray-600">|</span>
                     <span className="text-gold-400">admin123</span>
                   </div>

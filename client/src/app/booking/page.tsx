@@ -144,12 +144,10 @@ const isTimeSlotOverlapping = (
   const slotEndMinutes = slotStartMinutes + slotDuration;
   
   return bookedSlots.some(booking => {
-    // Skip if we're excluding a specific booking (for updates)
     if (excludeCurrentBookingId && (booking as any)._id === excludeCurrentBookingId) {
       return false;
     }
     
-    // Only check for same stylist and date
     if (booking.stylist !== stylist || booking.date !== date) {
       return false;
     }
@@ -157,7 +155,6 @@ const isTimeSlotOverlapping = (
     const bookedStartMinutes = timeToMinutes(booking.startTime);
     const bookedEndMinutes = timeToMinutes(booking.endTime);
     
-    // Check for overlap: existing booking ends after slot starts AND existing booking starts before slot ends
     return (bookedEndMinutes > slotStartMinutes && bookedStartMinutes < slotEndMinutes);
   });
 };
@@ -175,7 +172,6 @@ export default function Booking() {
   // OTP Verification States
   const [isVerifying, setIsVerifying] = useState(false);
   const [otp, setOtp] = useState('');
-  const [generatedOtp, setGeneratedOtp] = useState('');
   const [isSendingOtp, setIsSendingOtp] = useState(false);
 
   // Booked time slots from database
@@ -207,7 +203,6 @@ export default function Booking() {
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.bookings) {
-          // Extract stylist, date, startTime, endTime, and duration from each booking
           const slots: BookedSlot[] = data.bookings.map((booking: any) => ({
             stylist: booking.stylist,
             date: booking.date,
@@ -238,7 +233,7 @@ export default function Booking() {
     fetchBookings();
   }, []);
 
-  // Check if a time slot is available (not overlapping with any booked appointment)
+  // Check if a time slot is available
   const isTimeSlotAvailable = (stylist: string, date: string, time: string, duration: number): boolean => {
     return !isTimeSlotOverlapping(time, duration, bookedSlots, stylist, date);
   };
@@ -286,7 +281,6 @@ export default function Booking() {
     if (services.length === 0) return 'Please select at least one service';
     if (!stylist) return 'Please select a stylist first';
     
-    // Check if time slot is valid for the selected date
     const [year, month, day] = date.split('-');
     const selectedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
     const hours = getBusinessHours(selectedDate);
@@ -300,7 +294,6 @@ export default function Booking() {
     if (finishMinutes > endMinutes) return 'Appointment would end after business hours';
     if (slotMinutes > endMinutes - 60) return 'Please select an earlier time slot to complete your services';
     
-    // Check if the time slot overlaps with any existing booking for this stylist on this date
     if (!isTimeSlotAvailable(stylist, date, time, totalDuration)) {
       return `This time slot overlaps with an existing booking for ${stylist}. Please select another time.`;
     }
@@ -325,14 +318,12 @@ export default function Booking() {
     if (stepNumber === 1) {
       const serviceError = validateServices(formData.services);
       if (serviceError) newErrors.services = serviceError;
-      
       const stylistError = validateStylist(formData.stylist);
       if (stylistError) newErrors.stylist = stylistError;
     }
     else if (stepNumber === 2) {
       const dateError = validateDate(formData.date);
       if (dateError) newErrors.date = dateError;
-      
       if (formData.date && formData.stylist) {
         const timeError = validateTime(formData.time, formData.date, formData.services, formData.stylist);
         if (timeError) newErrors.time = timeError;
@@ -343,10 +334,8 @@ export default function Booking() {
     else if (stepNumber === 3) {
       const nameError = validateName(formData.name);
       if (nameError) newErrors.name = nameError;
-      
       const emailError = validateEmail(formData.email);
       if (emailError) newErrors.email = emailError;
-      
       const phoneError = validatePhone(formData.phone);
       if (phoneError) newErrors.phone = phoneError;
     }
@@ -364,49 +353,37 @@ export default function Booking() {
     
     const [year, month, day] = formData.date.split('-');
     const selectedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-    
     const hours = getBusinessHours(selectedDate);
     const totalDuration = calculateTotalDuration();
-    
     const allSlots = generateTimeSlots(hours.start, hours.end);
     
-    // Filter available slots - only show slots that don't overlap with any existing booking
     return allSlots.filter(slot => {
       const slotMinutes = timeToMinutes(slot);
       const finishMinutes = slotMinutes + totalDuration;
       const endMinutes = timeToMinutes(hours.end);
       const maxStartMinutes = endMinutes - totalDuration;
       
-      // Check if slot is within business hours
       const isValidTime = slotMinutes >= timeToMinutes(hours.start) && 
                           slotMinutes <= maxStartMinutes && 
                           finishMinutes <= endMinutes;
       
       if (!isValidTime) return false;
-      
-      // Check if the slot overlaps with any existing booking for this stylist on this date
       const isAvailable = isTimeSlotAvailable(formData.stylist, formData.date, slot, totalDuration);
-      
       return isAvailable;
     });
   };
 
   const calculateFinishingTime = () => {
     if (!formData.time || formData.services.length === 0) return null;
-    
     const totalDuration = calculateTotalDuration();
     const startTime = formData.time;
-    
     const timeMatch = startTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
     if (!timeMatch) return null;
-    
     let hours = parseInt(timeMatch[1]);
     const minutes = parseInt(timeMatch[2]);
     const period = timeMatch[3].toUpperCase();
-    
     if (period === 'PM' && hours !== 12) hours += 12;
     if (period === 'AM' && hours === 12) hours = 0;
-    
     const endMinutesTotal = hours * 60 + minutes + totalDuration;
     return minutesToTime(endMinutesTotal);
   };
@@ -424,28 +401,20 @@ export default function Booking() {
     return servicesTotal + appointmentFee;
   };
 
-  // --- PDF GENERATION LOGIC ---
   const generatePDF = (bookingData: any) => {
     const doc = new jsPDF();
-    
-    // Background & Theme Colors
     const gold = [212, 175, 55];
     const dark = [18, 18, 18];
 
-    // Header Background
     doc.setFillColor(dark[0], dark[1], dark[2]);
     doc.rect(0, 0, 210, 50, 'F');
-    
-    // Title
     doc.setTextColor(gold[0], gold[1], gold[2]);
     doc.setFontSize(26);
     doc.text('RANDU SALON', 105, 25, { align: 'center' });
     doc.setFontSize(12);
     doc.text('OFFICIAL BOOKING RECEIPT', 105, 35, { align: 'center' });
 
-    // Body
     doc.setTextColor(40, 40, 40);
-    
     let yPos = 70;
     const addField = (label: string, value: string) => {
       doc.setFontSize(11);
@@ -460,7 +429,6 @@ export default function Booking() {
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(dark[0], dark[1], dark[2]);
     doc.text('Client Information', 20, yPos - 10);
-    
     addField('Name', bookingData.name);
     addField('Email', bookingData.email);
     addField('Phone', bookingData.phone);
@@ -469,7 +437,6 @@ export default function Booking() {
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.text('Appointment Details', 20, yPos - 10);
-
     addField('Date', bookingData.date);
     addField('Time Slot', `${bookingData.time} - ${bookingData.finishingTime}`);
     addField('Stylist', bookingData.stylist);
@@ -478,12 +445,10 @@ export default function Booking() {
     doc.setDrawColor(gold[0], gold[1], gold[2]);
     doc.line(20, yPos, 190, yPos);
     yPos += 10;
-
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.text('Services Booked:', 20, yPos);
     yPos += 10;
-    
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(12);
     bookingData.services.forEach((s: any) => {
@@ -491,11 +456,9 @@ export default function Booking() {
       doc.text(`Rs.${s.price}`, 170, yPos);
       yPos += 8;
     });
-
     yPos += 5;
     doc.text(`Appointment Fee:`, 25, yPos);
     doc.text(`Rs.${calculateAppointmentFee()}`, 170, yPos);
-    
     yPos += 15;
     doc.setFillColor(gold[0], gold[1], gold[2]);
     doc.rect(20, yPos, 170, 15, 'F');
@@ -503,96 +466,98 @@ export default function Booking() {
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
     doc.text(`TOTAL AMOUNT: Rs.${bookingData.totalPrice}`, 105, yPos + 10, { align: 'center' });
-
     doc.save(`Booking_${bookingData.name.replace(/\s+/g, '_')}.pdf`);
   };
 
-  // --- SAVE BOOKING TO DATABASE ---
-  const saveBookingToDatabase = async (bookingData: any) => {
+  // --- CREATE PENDING BOOKING FIRST ---
+  const createPendingBooking = async () => {
     try {
+      const bookingData = {
+        services: formData.services,
+        stylist: formData.stylist,
+        date: formData.date,
+        time: formData.time,
+        finishingTime: calculateFinishingTime(),
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        notes: formData.notes,
+        totalPrice: calculateTotalPrice(),
+        appointmentFee: calculateAppointmentFee(),
+        servicesTotal: formData.services.reduce((sum, s) => sum + s.price, 0),
+        totalDuration: calculateTotalDuration(),
+      };
+
+      console.log('Creating pending booking...', bookingData);
+      
       const response = await fetch('/api/create-booking', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          services: bookingData.services,
-          stylist: bookingData.stylist,
-          date: bookingData.date,
-          time: bookingData.time,
-          finishingTime: bookingData.finishingTime,
-          name: bookingData.name,
-          email: bookingData.email,
-          phone: bookingData.phone,
-          notes: bookingData.notes,
-          totalPrice: bookingData.totalPrice,
-          appointmentFee: calculateAppointmentFee(),
-          servicesTotal: bookingData.services.reduce((sum: number, s: any) => sum + s.price, 0),
-          totalDuration: calculateTotalDuration(),
-        }),
+        body: JSON.stringify(bookingData),
       });
 
-      const result = await response.json();
-      
-      if (result.success) {
-        console.log('Booking saved to database:', result.bookingId);
-        // Refresh bookings after saving
-        await fetchBookings();
+      const data = await response.json();
+      console.log('Create booking response:', data);
+
+      if (response.ok && data.success) {
+        console.log('Pending booking created successfully:', data.bookingId);
         return true;
       } else {
-        console.error('Failed to save booking:', result.message);
+        console.error('Failed to create booking:', data.message);
+        alert(data.message || 'Failed to create booking. Please try again.');
         return false;
       }
     } catch (error) {
-      console.error('Error saving booking:', error);
+      console.error('Error creating booking:', error);
+      alert('Unable to create booking. Please check your connection.');
       return false;
     }
   };
 
-  // --- OTP VERIFICATION LOGIC ---
+  // --- UPDATED OTP VERIFICATION LOGIC ---
   const handleSendOTP = async () => {
-    // Final validation before sending OTP
     const isValid = validateStep(3);
     if (!isValid) {
-      // Mark all fields as touched to show errors
-      setTouched({
-        name: true,
-        email: true,
-        phone: true
-      });
+      setTouched({ name: true, email: true, phone: true });
+      if (errors.name) alert(errors.name);
+      else if (errors.email) alert(errors.email);
+      else if (errors.phone) alert(errors.phone);
+      else alert('Please fill all required fields correctly');
       return;
     }
     
     setIsSendingOtp(true);
     
     try {
-      const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      // STEP 1: Create pending booking
+      console.log('Step 1: Creating pending booking...');
+      const bookingCreated = await createPendingBooking();
+      if (!bookingCreated) {
+        throw new Error('Failed to create booking. Please try again.');
+      }
       
+      // STEP 2: Send OTP to backend
+      console.log('Step 2: Sending OTP to email...');
       const response = await fetch('/api/send-otp', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: formData.email,
-          otp: newOtp,
-          name: formData.name || 'Valued Customer'
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: formData.email, name: formData.name || 'Valued Customer' }),
       });
 
       const data = await response.json();
+      console.log('Send OTP response:', data);
 
       if (response.ok && data.success) {
-        setGeneratedOtp(newOtp);
         setIsVerifying(true);
-        alert(`Verification code sent to ${formData.email}. Please check your inbox.`);
+        alert(`✓ Booking created! Verification code sent to ${formData.email}.\n\n📧 Please check your inbox (or spam folder).`);
       } else {
         throw new Error(data.message || 'Failed to send OTP email');
       }
-      
     } catch (error) {
-      console.error('Error sending OTP:', error);
-      alert('Unable to send verification code. Please ensure your backend is correctly configured.');
+      console.error('Error in handleSendOTP:', error);
+      alert(error instanceof Error ? error.message : 'Unable to send verification code. Please try again.');
     } finally {
       setIsSendingOtp(false);
     }
@@ -604,19 +569,33 @@ export default function Booking() {
       return;
     }
     
-    if (otp === generatedOtp) {
-      const summary = {
-        ...formData,
-        finishingTime: calculateFinishingTime(),
-        totalPrice: calculateTotalPrice(),
-      };
-      
-      // Save to MongoDB via Go backend
-      const saved = await saveBookingToDatabase(summary);
-      
-      if (saved) {
+    setIsSendingOtp(true);
+    
+    try {
+      // Verify OTP with backend
+      console.log('Verifying OTP with backend...');
+      const response = await fetch('/api/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          email: formData.email, 
+          otp: otp 
+        }),
+      });
+
+      const data = await response.json();
+      console.log('Verify OTP response:', data);
+
+      if (response.ok && data.success) {
+        // OTP verified successfully
+        const summary = {
+          ...formData,
+          finishingTime: calculateFinishingTime(),
+          totalPrice: calculateTotalPrice(),
+        };
+        
         generatePDF(summary);
-        alert('Booking Confirmed successfully! Your receipt has been downloaded and booking has been saved.');
+        alert('✓ Booking Confirmed successfully! Your receipt has been downloaded.');
         setIsVerifying(false);
         
         // Reset form
@@ -634,17 +613,22 @@ export default function Booking() {
         setOtp('');
         setErrors({});
         setTouched({});
+        
+        // Refresh bookings
+        fetchBookings();
       } else {
-        alert('Booking confirmed but failed to save to database. Please contact support.');
+        alert(data.message || 'Invalid OTP. Please try again.');
+        setOtp('');
       }
-    } else {
-      alert('Invalid OTP. Please try again.');
-      setOtp('');
+    } catch (error) {
+      console.error('Error verifying OTP:', error);
+      alert('Failed to verify OTP. Please try again.');
+    } finally {
+      setIsSendingOtp(false);
     }
   };
 
   const availableTimeSlots = getAvailableTimeSlots();
-
   const getBusinessHoursDisplay = () => {
     if (!formData.date) return null;
     const [year, month, day] = formData.date.split('-');
@@ -670,7 +654,6 @@ export default function Booking() {
     today.setHours(0, 0, 0, 0);
     const maxDate = getMaxDate();
     maxDate.setHours(0, 0, 0, 0);
-    
     if (date <= today || date > maxDate) return false;
     return true;
   };
@@ -684,11 +667,7 @@ export default function Booking() {
 
   const handleDateSelect = (date: Date) => {
     if (isDateSelectable(date)) {
-      setFormData({
-        ...formData,
-        date: formatDate(date),
-        time: ''
-      });
+      setFormData({ ...formData, date: formatDate(date), time: '' });
       setErrors(prev => ({ ...prev, date: '', time: '' }));
       setShowCalendar(false);
     }
@@ -705,13 +684,10 @@ export default function Booking() {
   const changeMonth = (increment: number) => {
     const newMonth = new Date(currentMonth);
     newMonth.setMonth(currentMonth.getMonth() + increment);
-    
     const today = new Date();
     const maxDate = getMaxDate();
-    
     if (newMonth > maxDate) return;
     if (newMonth < new Date(today.getFullYear(), today.getMonth(), 1)) return;
-    
     setCurrentMonth(newMonth);
   };
 
@@ -760,39 +736,20 @@ export default function Booking() {
     return (
       <div className="bg-dark-300 rounded-xl border border-gold-600/30 p-6 absolute top-full mt-2 left-0 z-20 w-80 shadow-xl">
         <div className="flex items-center justify-between mb-4">
-          <button
-            type="button"
-            onClick={() => changeMonth(-1)}
-            className="p-1 hover:bg-gold-500/20 rounded-full transition-colors"
-            disabled={currentMonth <= new Date()}
-          >
+          <button type="button" onClick={() => changeMonth(-1)} className="p-1 hover:bg-gold-500/20 rounded-full transition-colors" disabled={currentMonth <= new Date()}>
             <ChevronLeft className="w-5 h-5 text-gold-500" />
           </button>
-          <span className="text-white font-semibold">
-            {monthNames[month]} {year}
-          </span>
-          <button
-            type="button"
-            onClick={() => changeMonth(1)}
-            className="p-1 hover:bg-gold-500/20 rounded-full transition-colors"
-            disabled={currentMonth >= maxDate}
-          >
+          <span className="text-white font-semibold">{monthNames[month]} {year}</span>
+          <button type="button" onClick={() => changeMonth(1)} className="p-1 hover:bg-gold-500/20 rounded-full transition-colors" disabled={currentMonth >= maxDate}>
             <ChevronRight className="w-5 h-5 text-gold-500" />
           </button>
         </div>
-        
         <div className="grid grid-cols-7 gap-1 mb-2">
           {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
-            <div key={day} className="text-center text-xs text-gray-400">
-              {day}
-            </div>
+            <div key={day} className="text-center text-xs text-gray-400">{day}</div>
           ))}
         </div>
-        
-        <div className="grid grid-cols-7 gap-1">
-          {days}
-        </div>
-        
+        <div className="grid grid-cols-7 gap-1">{days}</div>
         <div className="mt-4 text-xs text-gray-400 text-center">
           <p>Available: Tomorrow - 2 weeks from now</p>
           <p className="mt-1">Mon-Fri: 9AM - 8PM | Sat: 9AM - 6PM | Sun: 10AM - 4PM</p>
@@ -802,96 +759,49 @@ export default function Booking() {
   };
 
   const toggleCategory = (categoryId: string) => {
-    setOpenCategories(prev => 
-      prev.includes(categoryId)
-        ? prev.filter(id => id !== categoryId)
-        : [...prev, categoryId]
-    );
+    setOpenCategories(prev => prev.includes(categoryId) ? prev.filter(id => id !== categoryId) : [...prev, categoryId]);
   };
 
   const handleServiceToggle = (service: { name: string; price: number; category: string; duration: number }) => {
     setFormData(prev => ({
       ...prev,
-      services: prev.services.some(s => s.name === service.name)
-        ? prev.services.filter(s => s.name !== service.name)
-        : [...prev.services, service],
+      services: prev.services.some(s => s.name === service.name) ? prev.services.filter(s => s.name !== service.name) : [...prev.services, service],
       time: '' 
     }));
     setErrors(prev => ({ ...prev, services: '' }));
   };
 
   const removeService = (serviceName: string) => {
-    setFormData(prev => ({
-      ...prev,
-      services: prev.services.filter(s => s.name !== serviceName),
-      time: '' 
-    }));
+    setFormData(prev => ({ ...prev, services: prev.services.filter(s => s.name !== serviceName), time: '' }));
   };
 
   const handleFieldChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value
-    });
-    
-    // Clear error for this field when user starts typing
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
-    }
-    
-    // Reset time when stylist changes
-    if (name === 'stylist') {
-      setFormData(prev => ({ ...prev, time: '' }));
-    }
+    setFormData({ ...formData, [name]: value });
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
+    if (name === 'stylist') setFormData(prev => ({ ...prev, time: '' }));
   };
 
   const handleBlur = (fieldName: string) => {
     setTouched(prev => ({ ...prev, [fieldName]: true }));
-    
-    // Validate on blur
     let error = '';
     switch(fieldName) {
-      case 'name':
-        error = validateName(formData.name);
-        break;
-      case 'email':
-        error = validateEmail(formData.email);
-        break;
-      case 'phone':
-        error = validatePhone(formData.phone);
-        break;
-      case 'stylist':
-        error = validateStylist(formData.stylist);
-        break;
+      case 'name': error = validateName(formData.name); break;
+      case 'email': error = validateEmail(formData.email); break;
+      case 'phone': error = validatePhone(formData.phone); break;
+      case 'stylist': error = validateStylist(formData.stylist); break;
     }
-    if (error) {
-      setErrors(prev => ({ ...prev, [fieldName]: error }));
-    }
+    if (error) setErrors(prev => ({ ...prev, [fieldName]: error }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (step === 1) {
-      if (validateStep(1)) {
-        setStep(2);
-      } else {
-        // Show specific error messages
-        if (errors.services) {
-          alert(errors.services);
-        } else if (errors.stylist) {
-          alert(errors.stylist);
-        } else {
-          alert('Please fix the errors before proceeding');
-        }
-      }
+      if (validateStep(1)) setStep(2);
+      else alert(errors.services || errors.stylist || 'Please fix the errors before proceeding');
     } else if (step === 2) {
-      if (validateStep(2)) {
-        setStep(3);
-      } else {
-        alert(errors.date || errors.time || errors.stylist || 'Please fix the errors before proceeding');
-      }
+      if (validateStep(2)) setStep(3);
+      else alert(errors.date || errors.time || 'Please fix the errors before proceeding');
     } else {
       handleSendOTP();
     }
@@ -933,19 +843,21 @@ export default function Booking() {
             
             <div className="flex gap-4">
               <button 
-                onClick={() => {
-                  setIsVerifying(false);
-                  setOtp('');
-                }}
+                onClick={() => { 
+                  setIsVerifying(false); 
+                  setOtp(''); 
+                }} 
                 className="flex-1 py-3 border border-gray-600 text-gray-400 rounded-full font-semibold hover:bg-gray-800 transition-all"
+                disabled={isSendingOtp}
               >
                 Cancel
               </button>
               <button 
-                onClick={handleVerifyAndConfirm}
-                className="flex-1 gold-gradient text-dark-900 py-3 rounded-full font-semibold hover:shadow-lg hover:shadow-gold-500/30 transition-all"
+                onClick={handleVerifyAndConfirm} 
+                disabled={isSendingOtp}
+                className="flex-1 gold-gradient text-dark-900 py-3 rounded-full font-semibold hover:shadow-lg hover:shadow-gold-500/30 transition-all disabled:opacity-50"
               >
-                Verify & Book
+                {isSendingOtp ? 'Verifying...' : 'Verify & Book'}
               </button>
             </div>
           </div>
@@ -955,11 +867,7 @@ export default function Booking() {
       {/* Hero Section */}
       <section className="relative py-32 bg-dark-400">
         <div className="absolute inset-0 z-0">
-          <img
-            src="https://images.unsplash.com/photo-1595476108010-b4d1f102b1b1?ixlib=rb-4.0.3"
-            alt="Booking Background"
-            className="w-full h-full object-cover opacity-20"
-          />
+          <img src="https://images.unsplash.com/photo-1595476108010-b4d1f102b1b1?ixlib=rb-4.0.3" alt="Booking Background" className="w-full h-full object-cover opacity-20" />
         </div>
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
@@ -986,11 +894,7 @@ export default function Booking() {
                   }`}>
                     {s}
                   </div>
-                  {s < 3 && (
-                    <div className={`w-16 h-0.5 mx-2 ${
-                      step > s ? 'bg-gold-500' : 'bg-dark-400'
-                    }`} />
-                  )}
+                  {s < 3 && <div className={`w-16 h-0.5 mx-2 ${step > s ? 'bg-gold-500' : 'bg-dark-400'}`} />}
                 </div>
               ))}
             </div>
@@ -1008,46 +912,27 @@ export default function Booking() {
                 <form onSubmit={handleSubmit}>
                   {step === 1 && (
                     <div className="space-y-6 animate-fade-in">
-                      <h3 className="font-display text-2xl font-bold gold-text-gradient mb-6">
-                        Select Your Services
-                      </h3>
-                      
+                      <h3 className="font-display text-2xl font-bold gold-text-gradient mb-6">Select Your Services</h3>
                       <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-3">
-                          Services (Select multiple from dropdowns) *
-                        </label>
+                        <label className="block text-sm font-medium text-gray-300 mb-3">Services (Select multiple from dropdowns) *</label>
                         <div className="space-y-4">
                           {serviceCategories.map((category) => (
                             <div key={category.id} className="border border-gold-600/20 rounded-lg overflow-hidden">
-                              <button
-                                type="button"
-                                onClick={() => toggleCategory(category.id)}
-                                className="w-full flex items-center justify-between p-4 bg-dark-300 hover:bg-dark-200 transition-colors"
-                              >
+                              <button type="button" onClick={() => toggleCategory(category.id)} className="w-full flex items-center justify-between p-4 bg-dark-300 hover:bg-dark-200 transition-colors">
                                 <div className="flex items-center space-x-3">
                                   <h4 className="text-lg font-semibold text-white">{category.title}</h4>
-                                  <span className="text-sm text-gold-400">
-                                    ({category.services.length} services)
-                                  </span>
+                                  <span className="text-sm text-gold-400">({category.services.length} services)</span>
                                 </div>
-                                {openCategories.includes(category.id) ? (
-                                  <ChevronUp className="w-5 h-5 text-gold-500" />
-                                ) : (
-                                  <ChevronDown className="w-5 h-5 text-gold-500" />
-                                )}
+                                {openCategories.includes(category.id) ? <ChevronUp className="w-5 h-5 text-gold-500" /> : <ChevronDown className="w-5 h-5 text-gold-500" />}
                               </button>
-                              
                               {openCategories.includes(category.id) && (
                                 <div className="p-4 space-y-2">
                                   {category.services.map((service) => (
-                                    <label
-                                      key={service.name}
-                                      className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-all duration-300 ${
-                                        formData.services.some(s => s.name === service.name)
-                                          ? 'border-gold-500 bg-gold-500/10 border'
-                                          : 'border border-gold-600/20 bg-dark-400 hover:border-gold-500/50'
-                                      }`}
-                                    >
+                                    <label key={service.name} className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-all duration-300 ${
+                                      formData.services.some(s => s.name === service.name)
+                                        ? 'border-gold-500 bg-gold-500/10 border'
+                                        : 'border border-gold-600/20 bg-dark-400 hover:border-gold-500/50'
+                                    }`}>
                                       <div className="flex items-center flex-1">
                                         <input
                                           type="checkbox"
@@ -1073,27 +958,21 @@ export default function Booking() {
                             </div>
                           ))}
                         </div>
-                        
                         {errors.services && touched.services && (
                           <div className="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start space-x-2">
                             <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
                             <p className="text-sm text-red-400">{errors.services}</p>
                           </div>
                         )}
-                        
                         {formData.services.length > 0 && (
                           <div className="mt-4 p-3 bg-gold-500/10 rounded-lg border border-gold-500/30">
-                            <p className="text-gold-400 text-sm">
-                              Selected services: {formData.services.length} | Total duration: {totalDuration} minutes
-                            </p>
+                            <p className="text-gold-400 text-sm">Selected services: {formData.services.length} | Total duration: {totalDuration} minutes</p>
                           </div>
                         )}
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gold-400 mb-2">
-                          Preferred Stylist
-                        </label>
+                        <label className="block text-sm font-medium text-gold-400 mb-2">Preferred Stylist</label>
                         <div className="relative">
                           <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gold-500" />
                           <select
@@ -1111,36 +990,11 @@ export default function Booking() {
                           >
                             <option value="" className="text-gray-400 bg-black">-- Choose your preferred stylist --</option>
                             {stylists.map((stylist) => (
-                              <option key={stylist} value={stylist} className="text-white bg-black">
-                                ✨ {stylist}
-                              </option>
+                              <option key={stylist} value={stylist} className="text-white bg-black">✨ {stylist}</option>
                             ))}
                           </select>
                           <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gold-500 pointer-events-none" />
                         </div>
-                        
-                        {/* Beautiful Stylist Error Message */}
-                        {errors.stylist && touched.stylist && (
-                          <div className="mt-3 animate-slide-down">
-                            <div className="bg-gradient-to-r from-red-500/10 to-red-600/5 border-l-4 border-red-500 rounded-r-lg p-3 flex items-start space-x-3">
-                              <div className="flex-shrink-0">
-                                <div className="w-8 h-8 bg-red-500/20 rounded-full flex items-center justify-center">
-                                  <AlertCircle className="w-4 h-4 text-red-400" />
-                                </div>
-                              </div>
-                              <div className="flex-1">
-                                <p className="text-sm font-semibold text-red-400">Stylist Selection Required</p>
-                                <p className="text-xs text-red-300/80 mt-0.5">{errors.stylist}</p>
-                                <p className="text-xs text-gray-400 mt-1.5 flex items-center space-x-1">
-                                  <span>💡</span>
-                                  <span>Choose from our expert stylists to ensure the best experience</span>
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* Success Message when stylist is selected */}
                         {formData.stylist && !errors.stylist && (
                           <div className="mt-2 flex items-center space-x-2 text-xs text-gold-400">
                             <div className="w-1.5 h-1.5 bg-gold-400 rounded-full animate-pulse"></div>
@@ -1153,23 +1007,14 @@ export default function Booking() {
 
                   {step === 2 && (
                     <div className="space-y-6 animate-fade-in">
-                      <h3 className="font-display text-2xl font-bold gold-text-gradient mb-6">
-                        Choose Date & Time
-                      </h3>
-                      
+                      <h3 className="font-display text-2xl font-bold gold-text-gradient mb-6">Choose Date & Time</h3>
                       {!formData.stylist && (
                         <div className="mb-4 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-                          <p className="text-yellow-400 text-sm flex items-center space-x-2">
-                            <AlertCircle className="w-4 h-4" />
-                            <span>Please select a stylist first to see available time slots</span>
-                          </p>
+                          <p className="text-yellow-400 text-sm flex items-center space-x-2"><AlertCircle className="w-4 h-4" /><span>Please select a stylist first to see available time slots</span></p>
                         </div>
                       )}
-                      
                       <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Select Date *
-                        </label>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">Select Date *</label>
                         <div className="relative">
                           <button
                             type="button"
@@ -1192,41 +1037,25 @@ export default function Booking() {
                             onClick={() => formData.stylist && setShowCalendar(!showCalendar)}
                           />
                           {formData.date && (
-                            <button
-                              type="button"
-                              onClick={() => setFormData({...formData, date: '', time: ''})}
-                              className="absolute right-3 top-1/2 transform -translate-y-1/2"
-                            >
+                            <button type="button" onClick={() => setFormData({...formData, date: '', time: ''})} className="absolute right-3 top-1/2 transform -translate-y-1/2">
                               <X className="w-4 h-4 text-gray-400 hover:text-white" />
                             </button>
                           )}
                           {showCalendar && formData.stylist && renderCalendar()}
                         </div>
                         {errors.date && <p className="mt-2 text-sm text-red-400">{errors.date}</p>}
-                        {formData.date && businessHours && (
-                          <p className="mt-2 text-xs text-gold-400">
-                            Business hours: {businessHours}
-                          </p>
-                        )}
+                        {formData.date && businessHours && (<p className="mt-2 text-xs text-gold-400">Business hours: {businessHours}</p>)}
                       </div>
 
                       <div className="mt-6">
                         <div className="flex items-center justify-between mb-2">
-                          <label className="block text-sm font-medium text-gray-300">
-                            Select Time *
-                          </label>
+                          <label className="block text-sm font-medium text-gray-300">Select Time *</label>
                           {formData.date && formData.stylist && availableTimeSlots.length > 0 && (
                             <span className="text-xs text-green-400 bg-green-400/10 px-2 py-1 rounded-full">
                               {availableTimeSlots.length} slots available for {formData.stylist}
                             </span>
                           )}
-                          {formData.date && formData.stylist && availableTimeSlots.length === 0 && (
-                            <span className="text-xs text-orange-400 bg-orange-400/10 px-2 py-1 rounded-full">
-                              No available slots
-                            </span>
-                          )}
                         </div>
-
                         {!formData.stylist ? (
                           <div className="p-6 border border-dashed border-yellow-600/30 rounded-xl text-center bg-yellow-500/5">
                             <User className="w-8 h-8 text-yellow-500/50 mx-auto mb-2" />
@@ -1241,7 +1070,7 @@ export default function Booking() {
                           <div className="p-6 border border-dashed border-red-500/30 bg-red-500/5 rounded-xl text-center">
                             <Clock className="w-8 h-8 text-red-500/50 mx-auto mb-2" />
                             <p className="text-red-400 text-sm">
-                              No available time slots for {formData.stylist} on {formData.date}. <br/>
+                              No available time slots for {formData.stylist} on {formData.date}.<br/>
                               Please choose another date or select a different stylist.
                             </p>
                           </div>
@@ -1276,16 +1105,10 @@ export default function Booking() {
                               })}
                             </div>
                             {errors.time && <p className="mt-2 text-sm text-red-400">{errors.time}</p>}
-                            {availableTimeSlots.length > 0 && (
-                              <p className="mt-3 text-xs text-gray-400 text-center">
-                                Showing available slots for {formData.stylist} on {formData.date}
-                              </p>
-                            )}
                           </>
                         )}
                       </div>
 
-                      {/* Duration and Finishing Time Display */}
                       {formData.time && formData.services.length > 0 && (
                         <div className="mt-4 p-4 bg-gold-500/10 rounded-lg border border-gold-500/30">
                           <div className="flex items-center justify-between text-sm">
@@ -1312,14 +1135,9 @@ export default function Booking() {
 
                   {step === 3 && (
                     <div className="space-y-6 animate-fade-in">
-                      <h3 className="font-display text-2xl font-bold gold-text-gradient mb-6">
-                        Your Information
-                      </h3>
-                      
+                      <h3 className="font-display text-2xl font-bold gold-text-gradient mb-6">Your Information</h3>
                       <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Full Name *
-                        </label>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">Full Name *</label>
                         <div className="relative">
                           <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gold-500" />
                           <input
@@ -1335,15 +1153,11 @@ export default function Booking() {
                             placeholder="Enter your full name"
                           />
                         </div>
-                        {errors.name && touched.name && (
-                          <p className="mt-2 text-sm text-red-400">{errors.name}</p>
-                        )}
+                        {errors.name && touched.name && <p className="mt-2 text-sm text-red-400">{errors.name}</p>}
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Email Address *
-                        </label>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">Email Address *</label>
                         <div className="relative">
                           <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gold-500" />
                           <input
@@ -1359,15 +1173,11 @@ export default function Booking() {
                             placeholder="your@email.com"
                           />
                         </div>
-                        {errors.email && touched.email && (
-                          <p className="mt-2 text-sm text-red-400">{errors.email}</p>
-                        )}
+                        {errors.email && touched.email && <p className="mt-2 text-sm text-red-400">{errors.email}</p>}
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Phone Number *
-                        </label>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">Phone Number *</label>
                         <div className="relative">
                           <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gold-500" />
                           <input
@@ -1383,15 +1193,11 @@ export default function Booking() {
                             placeholder="+94 XXX XXX XXX"
                           />
                         </div>
-                        {errors.phone && touched.phone && (
-                          <p className="mt-2 text-sm text-red-400">{errors.phone}</p>
-                        )}
+                        {errors.phone && touched.phone && <p className="mt-2 text-sm text-red-400">{errors.phone}</p>}
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                          Special Requests or Notes (Optional)
-                        </label>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">Special Requests or Notes (Optional)</label>
                         <textarea
                           name="notes"
                           value={formData.notes}
@@ -1400,9 +1206,7 @@ export default function Booking() {
                           className="w-full bg-dark-300 border border-gold-600/30 rounded-lg py-3 px-4 text-white placeholder-gray-500 focus:outline-none focus:border-gold-500 transition-colors resize-none"
                           placeholder="Any special requests or notes for your stylist..."
                         />
-                        <p className="mt-1 text-xs text-gray-400">
-                          Max 500 characters
-                        </p>
+                        <p className="mt-1 text-xs text-gray-400">Max 500 characters</p>
                       </div>
                     </div>
                   )}
@@ -1439,7 +1243,6 @@ export default function Booking() {
                   <span>Booking Summary</span>
                 </h4>
                 
-                {/* Selected Services */}
                 <div className="mb-6">
                   <p className="text-gray-400 text-sm mb-3">Selected Services</p>
                   {formData.services.length > 0 ? (
@@ -1468,7 +1271,6 @@ export default function Booking() {
                   )}
                 </div>
 
-                {/* Duration Info */}
                 {formData.services.length > 0 && (
                   <div className="mb-4 p-3 bg-dark-300 rounded-lg">
                     <div className="flex justify-between text-sm">
@@ -1486,7 +1288,6 @@ export default function Booking() {
                   </div>
                 )}
 
-                {/* Price Breakdown */}
                 {formData.services.length > 0 && (
                   <div className="border-t border-gold-600/20 pt-4 mb-4">
                     <div className="space-y-2 text-sm">
@@ -1519,28 +1320,12 @@ export default function Booking() {
                   </div>
                 )}
 
-                {/* Appointment Fee Info Box */}
-                {serviceCount > 0 && (
-                  <div className="mb-4 p-3 bg-gold-500/5 rounded-lg border border-gold-500/20">
-                    <p className="text-xs text-gray-400">
-                      💡 {serviceCount === 1 ? 'Appointment fee: Rs.50 per service' : 
-                          serviceCount === 2 ? 'Appointment fee: Rs.50 per service (Total: Rs.100)' :
-                          serviceCount === 3 ? 'Appointment fee: Rs.50 per service (Total: Rs.150)' :
-                          `Appointment fee capped at Rs.${MAX_APPOINTMENT_FEE} for ${serviceCount} services (You save Rs.${serviceCount * APPOINTMENT_FEE_PER_SERVICE - MAX_APPOINTMENT_FEE})`}
-                    </p>
-                  </div>
-                )}
-
-                {/* Other Details */}
                 <div className="space-y-3 text-sm">
                   <div>
                     <p className="text-gray-400">Stylist</p>
                     <p className={`font-semibold ${formData.stylist ? 'text-gold-400' : 'text-red-400'}`}>
                       {formData.stylist || 'Not selected'}
                     </p>
-                    {!formData.stylist && (
-                      <p className="text-xs text-red-400/70 mt-1">⚠️ Please select a stylist</p>
-                    )}
                   </div>
                   {formData.date && (
                     <div>
@@ -1554,8 +1339,6 @@ export default function Booking() {
                       <p className="text-white font-semibold">{formData.time}</p>
                     </div>
                   )}
-
-                  {/* Dynamically added User Information */}
                   {formData.name && (
                     <div className="pt-3 border-t border-gold-600/20">
                       <p className="text-gray-400">Name</p>
@@ -1591,18 +1374,10 @@ export default function Booking() {
 
       <style jsx>{`
         @keyframes slide-down {
-          from {
-            opacity: 0;
-            transform: translateY(-10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+          from { opacity: 0; transform: translateY(-10px); }
+          to { opacity: 1; transform: translateY(0); }
         }
-        .animate-slide-down {
-          animation: slide-down 0.3s ease-out;
-        }
+        .animate-slide-down { animation: slide-down 0.3s ease-out; }
       `}</style>
     </main>
   );

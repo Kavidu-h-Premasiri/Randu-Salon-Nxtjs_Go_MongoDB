@@ -57,3 +57,22 @@ func DisconnectDB() error {
 func GetBookingCollection() *mongo.Collection {
 	return BookingCollection
 }
+
+// GetContactCollection returns the contacts collection
+func GetContactCollection() *mongo.Collection {
+	return ContactCollection
+}
+
+// GetCollection - Generic function to get any collection by name
+func GetCollection(collectionName string) *mongo.Collection {
+	if DB == nil {
+		fmt.Println("Warning: Database not initialized")
+		return nil
+	}
+	return DB.Database("Randu_Salon").Collection(collectionName)
+}
+
+// GetDB returns the MongoDB client
+func GetDB() *mongo.Client {
+	return DB
+}

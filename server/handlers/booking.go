@@ -1,252 +1,215 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
 	"server/config"
 	"server/models"
 
+	"github.com/go-playground/validator/v10"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
-// CreateBooking handles booking creation
+var validateBooking = validator.New()
+
+// CreateBooking creates a new booking
 func CreateBooking(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// Only accept POST method
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Parse request body
-	var bookingReq models.BookingRequest
-	err := json.NewDecoder(r.Body).Decode(&bookingReq)
-	if err != nil {
+	var req models.BookingRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(models.BookingResponse{
-			Success: false,
-			Message: "Invalid request body: " + err.Error(),
-		})
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request body"})
 		return
 	}
 
-	// Calculate totals if not provided
-	servicesTotal := bookingReq.ServicesTotal
-	if servicesTotal == 0 {
-		for _, service := range bookingReq.Services {
-			servicesTotal += service.Price
-		}
-	}
-
-	totalDuration := bookingReq.TotalDuration
-	if totalDuration == 0 {
-		for _, service := range bookingReq.Services {
-			totalDuration += service.Duration
-		}
-	}
-
-	// Create booking document
+	// Create booking object
 	booking := models.Booking{
-		Services:       bookingReq.Services,
-		Stylist:        bookingReq.Stylist,
-		Date:           bookingReq.Date,
-		Time:           bookingReq.Time,
-		FinishingTime:  bookingReq.FinishingTime,
-		Name:           bookingReq.Name,
-		Email:          bookingReq.Email,
-		Phone:          bookingReq.Phone,
-		Notes:          bookingReq.Notes,
-		TotalPrice:     bookingReq.TotalPrice,
-		AppointmentFee: bookingReq.AppointmentFee,
-		ServicesTotal:  servicesTotal,
-		TotalDuration:  totalDuration,
-		Status:         "confirmed",
+		ID:             primitive.NewObjectID(),
+		Name:           req.Name,
+		Email:          req.Email,
+		Phone:          req.Phone,
+		Services:       req.Services,
+		Stylist:        req.Stylist,
+		Date:           req.Date,
+		Time:           req.Time,
+		FinishingTime:  req.FinishingTime,
+		Notes:          req.Notes,
+		Status:         "pending",
+		OTPVerified:    false,
+		TotalPrice:     req.TotalPrice,
+		AppointmentFee: req.AppointmentFee,
+		ServicesTotal:  req.ServicesTotal,
+		TotalDuration:  req.TotalDuration,
 		CreatedAt:      time.Now(),
 		UpdatedAt:      time.Now(),
 	}
 
-	// Get collection
-	bookingCollection := config.GetBookingCollection()
+	// Validate booking
+	if err := validateBooking.Struct(booking); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
 
-	// Insert into database
-	result, err := bookingCollection.InsertOne(context.Background(), booking)
+	collection := config.GetCollection("bookings")
+
+	// Check for existing pending booking
+	filter := bson.M{
+		"email":  booking.Email,
+		"date":   booking.Date,
+		"time":   booking.Time,
+		"status": "pending",
+	}
+
+	var existingBooking models.Booking
+	err := collection.FindOne(r.Context(), filter).Decode(&existingBooking)
+	if err == nil {
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(map[string]string{"error": "A pending booking already exists for this time slot"})
+		return
+	}
+
+	// Insert booking
+	result, err := collection.InsertOne(r.Context(), booking)
 	if err != nil {
+		log.Printf("Error creating booking: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(models.BookingResponse{
-			Success: false,
-			Message: "Failed to save booking: " + err.Error(),
-		})
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to create booking"})
 		return
 	}
 
-	// Get the inserted ID
-	bookingID := result.InsertedID.(primitive.ObjectID).Hex()
-
-	// Send success response
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(models.BookingResponse{
-		Success:   true,
-		Message:   "Booking created successfully!",
-		BookingID: bookingID,
-	})
-}
-
-// GetBooking retrieves a booking by ID
-func GetBooking(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	// Get ID from query parameters
-	id := r.URL.Query().Get("id")
-	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success": false,
-			"message": "Booking ID is required",
-		})
-		return
-	}
-
-	// Convert string ID to ObjectID
-	objID, err := primitive.ObjectIDFromHex(id)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success": false,
-			"message": "Invalid booking ID",
-		})
-		return
-	}
-
-	// Get collection
-	bookingCollection := config.GetBookingCollection()
-
-	// Find booking
-	var booking models.Booking
-	err = bookingCollection.FindOne(context.Background(), bson.M{"_id": objID}).Decode(&booking)
-	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success": false,
-			"message": "Booking not found",
-		})
-		return
-	}
-
-	// Send response
-	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"booking": booking,
+		"success":   true,
+		"message":   "Booking created successfully. Please verify your email to confirm.",
+		"bookingId": result.InsertedID,
 	})
 }
 
-// GetBookingsByEmail retrieves all bookings for a specific email
+// GetBookingsByEmail retrieves bookings by email
 func GetBookingsByEmail(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	email := r.URL.Query().Get("email")
 	if email == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success": false,
-			"message": "Email is required",
-		})
+		json.NewEncoder(w).Encode(map[string]string{"error": "Email parameter is required"})
 		return
 	}
 
-	bookingCollection := config.GetBookingCollection()
+	collection := config.GetCollection("bookings")
+	filter := bson.M{"email": email}
 
-	// Find all bookings for this email
-	cursor, err := bookingCollection.Find(context.Background(), bson.M{"email": email})
+	cursor, err := collection.Find(r.Context(), filter)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success": false,
-			"message": "Failed to fetch bookings",
-		})
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to fetch bookings"})
 		return
 	}
-	defer cursor.Close(context.Background())
+	defer cursor.Close(r.Context())
 
 	var bookings []models.Booking
-	if err = cursor.All(context.Background(), &bookings); err != nil {
+	if err = cursor.All(r.Context(), &bookings); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success": false,
-			"message": "Failed to decode bookings",
-		})
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to decode bookings"})
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success":  true,
 		"bookings": bookings,
 	})
 }
 
-// UpdateBookingStatus updates the status of a booking
-func UpdateBookingStatus(w http.ResponseWriter, r *http.Request) {
+// GetBooking retrieves a single booking by ID
+func GetBooking(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	if r.Method != http.MethodPut {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "ID parameter is required"})
 		return
 	}
 
-	var updateData struct {
+	objectID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid ID format"})
+		return
+	}
+
+	collection := config.GetCollection("bookings")
+	filter := bson.M{"_id": objectID}
+
+	var booking models.Booking
+	err = collection.FindOne(r.Context(), filter).Decode(&booking)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(map[string]string{"error": "Booking not found"})
+			return
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to fetch booking"})
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"booking": booking,
+	})
+}
+
+// UpdateBookingStatus updates booking status
+func UpdateBookingStatus(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	var req struct {
 		ID     string `json:"id"`
 		Status string `json:"status"`
 	}
 
-	err := json.NewDecoder(r.Body).Decode(&updateData)
-	if err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success": false,
-			"message": "Invalid request body",
-		})
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request body"})
 		return
 	}
 
-	objID, err := primitive.ObjectIDFromHex(updateData.ID)
+	objectID, err := primitive.ObjectIDFromHex(req.ID)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success": false,
-			"message": "Invalid booking ID",
-		})
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid ID format"})
 		return
 	}
 
-	bookingCollection := config.GetBookingCollection()
-
-	result, err := bookingCollection.UpdateOne(
-		context.Background(),
-		bson.M{"_id": objID},
-		bson.M{
-			"$set": bson.M{
-				"status":    updateData.Status,
-				"updatedAt": time.Now(),
-			},
+	collection := config.GetCollection("bookings")
+	filter := bson.M{"_id": objectID}
+	update := bson.M{
+		"$set": bson.M{
+			"status":    req.Status,
+			"updatedAt": time.Now(),
 		},
-	)
+	}
 
-	if err != nil || result.MatchedCount == 0 {
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success": false,
-			"message": "Booking not found or update failed",
-		})
+	result, err := collection.UpdateOne(r.Context(), filter, update)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update booking"})
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
+	if result.MatchedCount == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Booking not found"})
+		return
+	}
+
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
 		"message": "Booking status updated successfully",
@@ -257,31 +220,24 @@ func UpdateBookingStatus(w http.ResponseWriter, r *http.Request) {
 func GetAllBookings(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	bookingCollection := config.GetBookingCollection()
+	collection := config.GetCollection("bookings")
+	filter := bson.M{}
 
-	// Find all bookings
-	cursor, err := bookingCollection.Find(context.Background(), bson.M{})
+	cursor, err := collection.Find(r.Context(), filter)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success": false,
-			"message": "Failed to fetch bookings",
-		})
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to fetch bookings"})
 		return
 	}
-	defer cursor.Close(context.Background())
+	defer cursor.Close(r.Context())
 
 	var bookings []models.Booking
-	if err = cursor.All(context.Background(), &bookings); err != nil {
+	if err = cursor.All(r.Context(), &bookings); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success": false,
-			"message": "Failed to decode bookings",
-		})
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to decode bookings"})
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success":  true,
 		"bookings": bookings,

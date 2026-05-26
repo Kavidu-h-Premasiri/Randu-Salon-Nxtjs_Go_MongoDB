@@ -2,11 +2,11 @@ import { NextResponse } from 'next/server';
 
 export async function POST(request: Request) {
   try {
-    const { email, name } = await request.json();
+    const { email, otp } = await request.json();
     
-    if (!email) {
+    if (!email || !otp) {
       return NextResponse.json(
-        { success: false, message: 'Email is required' },
+        { success: false, message: 'Email and OTP are required' },
         { status: 400 }
       );
     }
@@ -14,25 +14,23 @@ export async function POST(request: Request) {
     // Call your Go backend API
     const backendUrl = process.env.BACKEND_URL || process.env.GO_BACKEND_URL || 'http://localhost:8080';
     
-    console.log(`Sending OTP request to: ${backendUrl}/api/send-otp for email: ${email}`);
+    console.log(`Verifying OTP for email: ${email} with OTP: ${otp}`);
     
-    const response = await fetch(`${backendUrl}/api/send-otp`, {
+    const response = await fetch(`${backendUrl}/api/verify-otp`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email, otp }),
     });
     
     const data = await response.json();
-    console.log('Backend OTP response:', data);
+    console.log('Backend verify response:', data);
     
     if (!response.ok) {
-      let errorMessage = data.error || 'Failed to send OTP';
-      if (response.status === 404) {
-        errorMessage = 'No pending booking found. Please create a booking first.';
-      } else if (response.status === 500) {
-        errorMessage = 'Server error. Please try again later.';
+      let errorMessage = data.error || 'Invalid OTP';
+      if (response.status === 400) {
+        errorMessage = 'Invalid or expired OTP. Please try again.';
       }
       
       return NextResponse.json(
@@ -43,12 +41,12 @@ export async function POST(request: Request) {
     
     return NextResponse.json({
       success: true,
-      message: 'OTP sent successfully to your email',
-      expiry: data.expiry
+      message: 'Booking confirmed successfully!',
+      booking: data.booking
     });
     
   } catch (error) {
-    console.error('Error in send-otp API route:', error);
+    console.error('Error in verify-otp API route:', error);
     return NextResponse.json(
       { 
         success: false, 

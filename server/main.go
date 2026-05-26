@@ -33,28 +33,32 @@ func main() {
 	api := router.PathPrefix("/api").Subrouter()
 
 	// Contact routes
-	api.HandleFunc("/contact", handlers.CreateContact).Methods("POST")
-	api.HandleFunc("/contacts", handlers.GetAllContacts).Methods("GET")
-	api.HandleFunc("/contact", handlers.GetContactByID).Methods("GET")
-	api.HandleFunc("/contact", handlers.DeleteContact).Methods("DELETE")
+	api.HandleFunc("/contact", handlers.CreateContact).Methods("POST", "OPTIONS")
+	api.HandleFunc("/contacts", handlers.GetAllContacts).Methods("GET", "OPTIONS")
+	api.HandleFunc("/contact", handlers.GetContactByID).Methods("GET", "OPTIONS")
+	api.HandleFunc("/contact", handlers.DeleteContact).Methods("DELETE", "OPTIONS")
 
 	// Booking routes
-	api.HandleFunc("/bookings", handlers.CreateBooking).Methods("POST")
-	api.HandleFunc("/bookings", handlers.GetBooking).Methods("GET")
-	api.HandleFunc("/bookings/email", handlers.GetBookingsByEmail).Methods("GET")
-	api.HandleFunc("/bookings/status", handlers.UpdateBookingStatus).Methods("PUT")
-	// Add this route with your other routes
-	api.HandleFunc("/bookings/all", handlers.GetAllBookings).Methods("GET")
+	api.HandleFunc("/bookings", handlers.CreateBooking).Methods("POST", "OPTIONS")
+	api.HandleFunc("/bookings", handlers.GetBooking).Methods("GET", "OPTIONS")
+	api.HandleFunc("/bookings/email", handlers.GetBookingsByEmail).Methods("GET", "OPTIONS")
+	api.HandleFunc("/bookings/status", handlers.UpdateBookingStatus).Methods("PUT", "OPTIONS")
+	api.HandleFunc("/bookings/all", handlers.GetAllBookings).Methods("GET", "OPTIONS")
+
+	// OTP Routes - IMPORTANT: Add these routes
+	api.HandleFunc("/send-otp", handlers.SendOTP).Methods("POST", "OPTIONS")
+	api.HandleFunc("/verify-otp", handlers.VerifyOTPAndConfirmBooking).Methods("POST", "OPTIONS")
 
 	// Health check endpoint
 	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
-	}).Methods("GET")
+	}).Methods("GET", "OPTIONS")
 
 	// CORS configuration
 	c := cors.New(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3000"}, // Add your frontend URL
+		AllowedOrigins:   []string{"http://localhost:3000", "http://192.168.56.1:3000"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization"},
 		AllowCredentials: true,
@@ -69,6 +73,12 @@ func main() {
 		port = "8080"
 	}
 
-	fmt.Printf("Server is running on port %s\n", port)
+	fmt.Printf("🚀 Server is running on port %s\n", port)
+	fmt.Printf("📋 Available routes:\n")
+	fmt.Printf("   POST   /api/send-otp     - Send OTP to email\n")
+	fmt.Printf("   POST   /api/verify-otp   - Verify OTP and confirm booking\n")
+	fmt.Printf("   POST   /api/bookings     - Create booking\n")
+	fmt.Printf("   GET    /api/bookings/all - Get all bookings\n")
+	fmt.Printf("   GET    /health           - Health check\n")
 	log.Fatal(http.ListenAndServe(":"+port, handler))
 }

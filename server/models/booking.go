@@ -6,55 +6,65 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-// Service represents a selected service
-type Service struct {
-	Name     string `json:"name" bson:"name"`
-	Price    int    `json:"price" bson:"price"`
-	Category string `json:"category" bson:"category"`
-	Duration int    `json:"duration" bson:"duration"`
-}
-
-// Booking represents the appointment booking
 type Booking struct {
-	ID             primitive.ObjectID `json:"id" bson:"_id,omitempty"`
-	Services       []Service          `json:"services" bson:"services"`
-	Stylist        string             `json:"stylist" bson:"stylist"`
-	Date           string             `json:"date" bson:"date"`
-	Time           string             `json:"time" bson:"time"`
-	FinishingTime  string             `json:"finishingTime" bson:"finishingTime"`
-	Name           string             `json:"name" bson:"name"`
-	Email          string             `json:"email" bson:"email"`
-	Phone          string             `json:"phone" bson:"phone"`
-	Notes          string             `json:"notes" bson:"notes"`
-	TotalPrice     int                `json:"totalPrice" bson:"totalPrice"`
-	AppointmentFee int                `json:"appointmentFee" bson:"appointmentFee"`
-	ServicesTotal  int                `json:"servicesTotal" bson:"servicesTotal"`
-	TotalDuration  int                `json:"totalDuration" bson:"totalDuration"`
-	Status         string             `json:"status" bson:"status"`
-	CreatedAt      time.Time          `json:"createdAt" bson:"createdAt"`
-	UpdatedAt      time.Time          `json:"updatedAt" bson:"updatedAt"`
+	ID             primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	Name           string             `bson:"name" json:"name" validate:"required"`
+	Email          string             `bson:"email" json:"email" validate:"required,email"`
+	Phone          string             `bson:"phone" json:"phone" validate:"required"`
+	Service        string             `bson:"service" json:"service"`
+	Services       []ServiceItem      `bson:"services" json:"services"`
+	Stylist        string             `bson:"stylist" json:"stylist" validate:"required"`
+	Date           string             `bson:"date" json:"date" validate:"required"`
+	Time           string             `bson:"time" json:"time" validate:"required"`
+	FinishingTime  string             `bson:"finishingTime" json:"finishingTime"`
+	Notes          string             `bson:"notes" json:"notes"`
+	Status         string             `bson:"status" json:"status"` // pending, confirmed, cancelled
+	OTP            string             `bson:"otp" json:"otp"`
+	OTPVerified    bool               `bson:"otpVerified" json:"otpVerified"`
+	OTPExpiry      time.Time          `bson:"otpExpiry" json:"otpExpiry"`
+	TotalPrice     int                `bson:"totalPrice" json:"totalPrice"`
+	AppointmentFee int                `bson:"appointmentFee" json:"appointmentFee"`
+	ServicesTotal  int                `bson:"servicesTotal" json:"servicesTotal"`
+	TotalDuration  int                `bson:"totalDuration" json:"totalDuration"`
+	CreatedAt      time.Time          `bson:"createdAt" json:"createdAt"`
+	UpdatedAt      time.Time          `bson:"updatedAt" json:"updatedAt"`
 }
 
-// BookingRequest represents the request body for creating a booking
+type ServiceItem struct {
+	Name     string `bson:"name" json:"name"`
+	Price    int    `bson:"price" json:"price"`
+	Category string `bson:"category" json:"category"`
+	Duration int    `bson:"duration" json:"duration"`
+}
+
+type OTPRequest struct {
+	Email string `json:"email" validate:"required,email"`
+}
+
+type OTPVerifyRequest struct {
+	Email string `json:"email" validate:"required,email"`
+	OTP   string `json:"otp" validate:"required,len=6"`
+}
+
 type BookingRequest struct {
-	Services       []Service `json:"services" binding:"required"`
-	Stylist        string    `json:"stylist"`
-	Date           string    `json:"date" binding:"required"`
-	Time           string    `json:"time" binding:"required"`
-	FinishingTime  string    `json:"finishingTime"`
-	Name           string    `json:"name" binding:"required"`
-	Email          string    `json:"email" binding:"required"`
-	Phone          string    `json:"phone" binding:"required"`
-	Notes          string    `json:"notes"`
-	TotalPrice     int       `json:"totalPrice" binding:"required"`
-	AppointmentFee int       `json:"appointmentFee"`
-	ServicesTotal  int       `json:"servicesTotal"`
-	TotalDuration  int       `json:"totalDuration"`
+	Services       []ServiceItem `json:"services"`
+	Stylist        string        `json:"stylist"`
+	Date           string        `json:"date"`
+	Time           string        `json:"time"`
+	FinishingTime  string        `json:"finishingTime"`
+	Name           string        `json:"name"`
+	Email          string        `json:"email"`
+	Phone          string        `json:"phone"`
+	Notes          string        `json:"notes"`
+	TotalPrice     int           `json:"totalPrice"`
+	AppointmentFee int           `json:"appointmentFee"`
+	ServicesTotal  int           `json:"servicesTotal"`
+	TotalDuration  int           `json:"totalDuration"`
 }
 
-// BookingResponse represents the response after creating a booking
 type BookingResponse struct {
-	Success   bool   `json:"success"`
-	Message   string `json:"message"`
-	BookingID string `json:"bookingId,omitempty"`
+	Success bool    `json:"success"`
+	Message string  `json:"message"`
+	Booking Booking `json:"booking,omitempty"`
+	ID      string  `json:"id,omitempty"`
 }
