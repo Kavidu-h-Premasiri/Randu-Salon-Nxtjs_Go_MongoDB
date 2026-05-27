@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -11,8 +12,15 @@ import (
 )
 
 var DB *mongo.Client
-var ContactCollection *mongo.Collection
-var BookingCollection *mongo.Collection
+
+var (
+	BookingCollection  *mongo.Collection
+	StylistCollection  *mongo.Collection
+	ServiceCollection  *mongo.Collection
+	TimeSlotCollection *mongo.Collection
+	ContactCollection  *mongo.Collection
+	SettingsCollection *mongo.Collection
+)
 
 func ConnectDB() error {
 	mongoURI := os.Getenv("MONGO_URI")
@@ -30,17 +38,25 @@ func ConnectDB() error {
 		return fmt.Errorf("failed to connect to MongoDB: %v", err)
 	}
 
-	// Ping the database
 	err = client.Ping(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to ping MongoDB: %v", err)
 	}
 
 	DB = client
-	ContactCollection = client.Database("Randu_Salon").Collection("contacts")
-	BookingCollection = client.Database("Randu_Salon").Collection("bookings")
+	dbName := os.Getenv("DB_NAME")
+	if dbName == "" {
+		dbName = "randu_salon"
+	}
 
-	fmt.Println("Connected to MongoDB successfully!")
+	BookingCollection = client.Database(dbName).Collection("bookings")
+	StylistCollection = client.Database(dbName).Collection("stylists")
+	ServiceCollection = client.Database(dbName).Collection("services")
+	TimeSlotCollection = client.Database(dbName).Collection("timeslots")
+	ContactCollection = client.Database(dbName).Collection("contacts")
+	SettingsCollection = client.Database(dbName).Collection("settings")
+
+	log.Println("Connected to MongoDB successfully!")
 	return nil
 }
 
@@ -53,26 +69,11 @@ func DisconnectDB() error {
 	return nil
 }
 
-// GetBookingCollection returns the bookings collection
+// Helper functions
 func GetBookingCollection() *mongo.Collection {
 	return BookingCollection
 }
 
-// GetContactCollection returns the contacts collection
 func GetContactCollection() *mongo.Collection {
 	return ContactCollection
-}
-
-// GetCollection - Generic function to get any collection by name
-func GetCollection(collectionName string) *mongo.Collection {
-	if DB == nil {
-		fmt.Println("Warning: Database not initialized")
-		return nil
-	}
-	return DB.Database("Randu_Salon").Collection(collectionName)
-}
-
-// GetDB returns the MongoDB client
-func GetDB() *mongo.Client {
-	return DB
 }

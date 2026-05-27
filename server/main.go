@@ -15,46 +15,64 @@ import (
 )
 
 func main() {
-	// Load environment variables
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, using system environment variables")
 	}
 
-	// Connect to MongoDB
 	if err := config.ConnectDB(); err != nil {
 		log.Fatal("Failed to connect to database:", err)
 	}
 	defer config.DisconnectDB()
 
-	// Initialize router
 	router := mux.NewRouter()
-
-	// API routes
 	api := router.PathPrefix("/api").Subrouter()
 
-	// Contact routes
-	api.HandleFunc("/contact", handlers.CreateContact).Methods("POST", "OPTIONS")
-	api.HandleFunc("/contacts", handlers.GetAllContacts).Methods("GET", "OPTIONS")
-	api.HandleFunc("/contact", handlers.GetContactByID).Methods("GET", "OPTIONS")
-	api.HandleFunc("/contact", handlers.DeleteContact).Methods("DELETE", "OPTIONS")
+	// Service routes
+	api.HandleFunc("/services", handlers.GetAllServices).Methods("GET", "OPTIONS")
+	api.HandleFunc("/services", handlers.CreateService).Methods("POST", "OPTIONS")
+	api.HandleFunc("/services/update", handlers.UpdateService).Methods("PUT", "OPTIONS")
+	api.HandleFunc("/services/delete", handlers.DeleteService).Methods("DELETE", "OPTIONS")
+
+	// Stylist routes
+	api.HandleFunc("/stylists", handlers.GetAllStylists).Methods("GET", "OPTIONS")
+	api.HandleFunc("/stylists", handlers.CreateStylist).Methods("POST", "OPTIONS")
+	api.HandleFunc("/stylists/update", handlers.UpdateStylist).Methods("PUT", "OPTIONS")
+	api.HandleFunc("/stylists/delete", handlers.DeleteStylist).Methods("DELETE", "OPTIONS")
+
+	// Time slot routes
+	api.HandleFunc("/timeslots", handlers.GetAvailableTimeSlots).Methods("GET", "OPTIONS")
+	api.HandleFunc("/timeslots/generate", handlers.GenerateTimeSlotsForStylist).Methods("POST", "OPTIONS")
 
 	// Booking routes
 	api.HandleFunc("/bookings", handlers.CreateBooking).Methods("POST", "OPTIONS")
-	api.HandleFunc("/bookings", handlers.GetBooking).Methods("GET", "OPTIONS")
-	api.HandleFunc("/bookings/email", handlers.GetBookingsByEmail).Methods("GET", "OPTIONS")
-	api.HandleFunc("/bookings/status", handlers.UpdateBookingStatus).Methods("PUT", "OPTIONS")
 	api.HandleFunc("/bookings/all", handlers.GetAllBookings).Methods("GET", "OPTIONS")
+	api.HandleFunc("/bookings/status", handlers.UpdateBookingStatus).Methods("PUT", "OPTIONS")
+	api.HandleFunc("/booking/update", handlers.UpdateBooking).Methods("PUT", "OPTIONS")
+	api.HandleFunc("/booking", handlers.GetSingleBooking).Methods("GET", "OPTIONS")
 
-	// OTP Routes - IMPORTANT: Add these routes
+	// OTP routes
 	api.HandleFunc("/send-otp", handlers.SendOTP).Methods("POST", "OPTIONS")
 	api.HandleFunc("/verify-otp", handlers.VerifyOTPAndConfirmBooking).Methods("POST", "OPTIONS")
 
-	// Health check endpoint
+	// Settings routes
+	api.HandleFunc("/settings", handlers.GetAllSettings).Methods("GET", "OPTIONS")
+	api.HandleFunc("/settings/update", handlers.UpdateSetting).Methods("PUT", "OPTIONS")
+	api.HandleFunc("/settings/init", handlers.InitDefaultSettings).Methods("POST", "OPTIONS")
+
+	// Service Categories routes
+	api.HandleFunc("/services/categories", handlers.GetAllServiceCategories).Methods("GET", "OPTIONS")
+
+	// Category routes
+	api.HandleFunc("/categories", handlers.GetAllCategories).Methods("GET", "OPTIONS")
+	api.HandleFunc("/categories", handlers.CreateCategory).Methods("POST", "OPTIONS")
+	api.HandleFunc("/categories/delete", handlers.DeleteCategory).Methods("DELETE", "OPTIONS")
+
+	// Health check
 	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
-	}).Methods("GET", "OPTIONS")
+	}).Methods("GET")
 
 	// CORS configuration
 	c := cors.New(cors.Options{
@@ -64,21 +82,12 @@ func main() {
 		AllowCredentials: true,
 	})
 
-	// Apply CORS middleware
 	handler := c.Handler(router)
-
-	// Start server
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 
 	fmt.Printf("🚀 Server is running on port %s\n", port)
-	fmt.Printf("📋 Available routes:\n")
-	fmt.Printf("   POST   /api/send-otp     - Send OTP to email\n")
-	fmt.Printf("   POST   /api/verify-otp   - Verify OTP and confirm booking\n")
-	fmt.Printf("   POST   /api/bookings     - Create booking\n")
-	fmt.Printf("   GET    /api/bookings/all - Get all bookings\n")
-	fmt.Printf("   GET    /health           - Health check\n")
 	log.Fatal(http.ListenAndServe(":"+port, handler))
 }

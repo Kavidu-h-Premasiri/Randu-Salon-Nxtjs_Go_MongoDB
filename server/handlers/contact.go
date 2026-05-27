@@ -13,178 +13,115 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-// CreateContact handles POST requests to save contact messages
 func CreateContact(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	var contact models.Contact
-
-	// Decode JSON request body
 	if err := json.NewDecoder(r.Body).Decode(&contact); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(models.ContactResponse{
-			Success: false,
-			Message: "Invalid request body",
-		})
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request body"})
 		return
 	}
 
-	// Validate required fields
 	if contact.Name == "" || contact.Email == "" || contact.Subject == "" || contact.Message == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(models.ContactResponse{
-			Success: false,
-			Message: "Name, email, subject, and message are required",
-		})
+		json.NewEncoder(w).Encode(map[string]string{"error": "All fields are required"})
 		return
 	}
 
-	// Set timestamps
 	contact.CreatedAt = time.Now()
 	contact.UpdatedAt = time.Now()
 	contact.ID = primitive.NewObjectID()
 
-	// Insert into MongoDB
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	result, err := config.ContactCollection.InsertOne(ctx, contact)
+	_, err := config.ContactCollection.InsertOne(context.Background(), contact)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(models.ContactResponse{
-			Success: false,
-			Message: "Failed to save contact message",
-		})
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to save message"})
 		return
 	}
 
-	contact.ID = result.InsertedID.(primitive.ObjectID)
-
-	// Return success response
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(models.ContactResponse{
-		Success: true,
-		Message: "Message sent successfully!",
-		Data:    &contact,
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Message sent successfully",
 	})
 }
 
-// GetAllContacts handles GET requests to fetch all contacts (admin only)
 func GetAllContacts(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	cursor, err := config.ContactCollection.Find(ctx, bson.M{})
+	cursor, err := config.ContactCollection.Find(context.Background(), bson.M{})
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(models.ContactResponse{
-			Success: false,
-			Message: "Failed to fetch contacts",
-		})
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to fetch contacts"})
 		return
 	}
-	defer cursor.Close(ctx)
+	defer cursor.Close(context.Background())
 
 	var contacts []models.Contact
-	if err = cursor.All(ctx, &contacts); err != nil {
+	if err = cursor.All(context.Background(), &contacts); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(models.ContactResponse{
-			Success: false,
-			Message: "Failed to decode contacts",
-		})
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to decode contacts"})
 		return
 	}
 
 	json.NewEncoder(w).Encode(contacts)
 }
 
-// GetContactByID handles GET requests to fetch a single contact by ID
 func GetContactByID(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// Get ID from URL params
-	vars := r.URL.Query()
-	id := vars.Get("id")
-
+	id := r.URL.Query().Get("id")
 	if id == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(models.ContactResponse{
-			Success: false,
-			Message: "ID is required",
-		})
+		json.NewEncoder(w).Encode(map[string]string{"error": "ID is required"})
 		return
 	}
 
 	objectID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(models.ContactResponse{
-			Success: false,
-			Message: "Invalid ID format",
-		})
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid ID format"})
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
 	var contact models.Contact
-	err = config.ContactCollection.FindOne(ctx, bson.M{"_id": objectID}).Decode(&contact)
+	err = config.ContactCollection.FindOne(context.Background(), bson.M{"_id": objectID}).Decode(&contact)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(models.ContactResponse{
-			Success: false,
-			Message: "Contact not found",
-		})
+		json.NewEncoder(w).Encode(map[string]string{"error": "Contact not found"})
 		return
 	}
 
 	json.NewEncoder(w).Encode(contact)
 }
 
-// DeleteContact handles DELETE requests to remove a contact (admin only)
 func DeleteContact(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	vars := r.URL.Query()
-	id := vars.Get("id")
-
+	id := r.URL.Query().Get("id")
 	if id == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(models.ContactResponse{
-			Success: false,
-			Message: "ID is required",
-		})
+		json.NewEncoder(w).Encode(map[string]string{"error": "ID is required"})
 		return
 	}
 
 	objectID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(models.ContactResponse{
-			Success: false,
-			Message: "Invalid ID format",
-		})
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid ID format"})
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	result, err := config.ContactCollection.DeleteOne(ctx, bson.M{"_id": objectID})
+	result, err := config.ContactCollection.DeleteOne(context.Background(), bson.M{"_id": objectID})
 	if err != nil || result.DeletedCount == 0 {
 		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(models.ContactResponse{
-			Success: false,
-			Message: "Contact not found",
-		})
+		json.NewEncoder(w).Encode(map[string]string{"error": "Contact not found"})
 		return
 	}
 
-	json.NewEncoder(w).Encode(models.ContactResponse{
-		Success: true,
-		Message: "Contact deleted successfully",
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Contact deleted successfully",
 	})
 }
